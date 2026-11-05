@@ -1,0 +1,10 @@
+{
+	"id": "bases-gallery",
+	"name": "Bases Gallery",
+	"version": "0.1.0",
+	"minAppVersion": "1.13.0",
+	"description": "Adds a gallery layout to Bases.",
+	"author": "Anup Chavan",
+	"authorUrl": "https://github.com/anupchavan",
+	"isDesktopOnly": false
+}
