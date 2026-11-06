@@ -1,18 +1,18 @@
-.bases-gallery {
-	--bases-gallery-gap: var(--size-4-2);
-	--bases-gallery-fade-duration: 150ms;
+.media-manager {
+	--media-manager-gap: var(--size-4-2);
+	--media-manager-fade-duration: 150ms;
 
 	padding: var(--bases-cards-group-padding, var(--size-4-3));
 	background: var(--bases-cards-container-background, transparent);
 }
 
-.bases-gallery-sizer {
+.media-manager-sizer {
 	position: relative;
-	height: var(--bases-gallery-height, 0);
-	row-gap: var(--bases-gallery-gap);
+	height: var(--media-manager-height, 0);
+	row-gap: var(--media-manager-gap);
 }
 
-.bases-gallery-tile {
+.media-manager-tile {
 	position: absolute;
 	top: 0;
 	left: 0;
@@ -20,31 +20,31 @@
 	height: var(--tile-height);
 	transform: translate(var(--tile-x), var(--tile-y));
 	overflow: hidden;
-	border-radius: var(--bases-gallery-radius);
+	border-radius: var(--media-manager-radius);
 	background: var(--bases-cards-cover-background, var(--background-secondary));
 	contain: strict;
 }
 
-.bases-gallery-media {
+.media-manager-media {
 	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 	opacity: 0;
-	transition: opacity var(--bases-gallery-fade-duration) linear;
+	transition: opacity var(--media-manager-fade-duration) linear;
 }
 
-.bases-gallery-media.is-loaded {
+.media-manager-media.is-loaded {
 	opacity: 1;
 }
 
 /* Sits over the SDR stand-in poster and fades in once its frame is ready. */
-.bases-gallery-hdr-poster {
+.media-manager-hdr-poster {
 	position: absolute;
 	inset: 0;
 }
 
-.bases-gallery-tile-icon {
+.media-manager-tile-icon {
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -55,7 +55,7 @@
 	--icon-stroke: var(--icon-l-stroke-width);
 }
 
-.bases-gallery-empty {
+.media-manager-empty {
 	padding: var(--size-4-4);
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
@@ -63,40 +63,40 @@
 }
 
 /* Shown while the next page's sizes are read. Only transform animates. */
-.bases-gallery-loader {
+.media-manager-loader {
 	width: var(--icon-l);
 	height: var(--icon-l);
 	margin: var(--size-4-4) auto;
 	border: var(--border-width) solid var(--background-modifier-border);
 	border-top-color: var(--text-muted);
 	border-radius: 50%;
-	animation: bases-gallery-spin 0.8s linear infinite;
+	animation: media-manager-spin 0.8s linear infinite;
 }
 
-@keyframes bases-gallery-spin {
+@keyframes media-manager-spin {
 	to {
 		transform: rotate(360deg);
 	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.bases-gallery-loader {
+	.media-manager-loader {
 		animation-duration: 2.4s;
 	}
 }
 
-.bases-gallery-tile {
+.media-manager-tile {
 	cursor: zoom-in;
 }
 
-.bases-gallery-tile.is-zoom-source {
+.media-manager-zoom-source {
 	visibility: hidden;
 }
 
 /* Fill on click: medium-zoom's timing (300 ms, cubic-bezier(.2,0,.2,1)). */
-.bases-gallery-zoom-overlay {
-	--bases-gallery-zoom-duration: 300ms;
-	--bases-gallery-dark-fade: 150ms;
+.media-manager-zoom-overlay {
+	--media-manager-zoom-duration: 300ms;
+	--media-manager-dark-fade: 150ms;
 
 	position: fixed;
 	inset: 0;
@@ -105,42 +105,42 @@
 	opacity: 0;
 	cursor: zoom-out;
 	transition:
-		opacity var(--bases-gallery-zoom-duration),
-		background-color var(--bases-gallery-dark-fade);
+		opacity var(--media-manager-zoom-duration),
+		background-color var(--media-manager-dark-fade);
 }
 
-.bases-gallery-zoom-overlay.is-open {
+.media-manager-zoom-overlay.is-open {
 	opacity: 1;
 }
 
 /* Fullscreen is black. The page goes black just before, so the window's
    fade into fullscreen doesn't flash the light page. */
-.bases-gallery-zoom-overlay.is-dark {
+.media-manager-zoom-overlay.is-dark {
 	background-color: black;
 }
 
 /* Holds the clone and the video controls; the part that goes fullscreen. */
-.bases-gallery-zoom-stage {
+.media-manager-zoom-stage {
 	position: fixed;
 	inset: 0;
 	z-index: var(--layer-modal);
 	pointer-events: none;
 }
 
-.bases-gallery-zoom-stage:fullscreen {
+.media-manager-zoom-stage:fullscreen {
 	background: black;
 	pointer-events: auto;
 	cursor: zoom-out;
 }
 
-.bases-gallery-zoom-box {
+.media-manager-zoom-box {
 	position: fixed;
 	top: var(--zoom-top);
 	left: var(--zoom-left);
 	width: var(--zoom-width);
 	height: var(--zoom-height);
 	overflow: hidden;
-	border-radius: var(--bases-gallery-radius);
+	border-radius: var(--zoom-start-radius, var(--media-manager-radius));
 	pointer-events: auto;
 	cursor: zoom-out;
 	/* Scrolling the pane underneath moves the box with the page. */
@@ -150,15 +150,15 @@
 	transition-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-.bases-gallery-zoom-box.is-open {
-	border-radius: var(--bases-gallery-zoom-radius);
+.media-manager-zoom-box.is-open {
+	border-radius: var(--media-manager-zoom-radius);
 	top: var(--frame-top);
 	left: var(--frame-left);
 	width: var(--frame-width);
 	height: var(--frame-height);
 }
 
-.bases-gallery-zoom-media {
+.media-manager-zoom-media {
 	position: absolute;
 	top: 50%;
 	left: 50%;
@@ -175,39 +175,39 @@
 	will-change: transform;
 }
 
-.bases-gallery-zoom-box.is-open .bases-gallery-zoom-media {
+.media-manager-zoom-box.is-open .media-manager-zoom-media {
 	transform: translate(-50%, -50%) scale(1);
 }
 
-video.bases-gallery-zoom-media {
+video.media-manager-zoom-media {
 	cursor: default;
 }
 
-.bases-gallery-zoom-stage.is-dark {
+.media-manager-zoom-stage.is-dark {
 	/* Square corners for the media and, through it, the chips. */
-	--bases-gallery-zoom-radius: 0px;
+	--media-manager-zoom-radius: 0px;
 }
 
-.bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
+.media-manager-zoom-stage:fullscreen .media-manager-zoom-box {
 	transform: none;
 }
 
 /* Window and fullscreen changes snap to the new size: animating the box
    while the media inside jumps would flicker. */
-.bases-gallery-zoom-stage.is-refitting .bases-gallery-zoom-box,
-.bases-gallery-zoom-stage.is-refitting .bases-gallery-zoom-media {
+.media-manager-zoom-stage.is-refitting .media-manager-zoom-box,
+.media-manager-zoom-stage.is-refitting .media-manager-zoom-media {
 	transition: none;
 }
 
-.bases-gallery-zoom-stage.is-idle .bases-gallery-zoom-box,
-.bases-gallery-zoom-stage.is-idle video.bases-gallery-zoom-media {
+.media-manager-zoom-stage.is-idle .media-manager-zoom-box,
+.media-manager-zoom-stage.is-idle video.media-manager-zoom-media {
 	cursor: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.bases-gallery-zoom-overlay,
-	.bases-gallery-zoom-box,
-	.bases-gallery-zoom-media {
+	.media-manager-zoom-overlay,
+	.media-manager-zoom-box,
+	.media-manager-zoom-media {
 		transition: none;
 	}
 }
@@ -219,79 +219,79 @@ video.bases-gallery-zoom-media {
  * fullscreen on the right. They fade in once the video has arrived and hide
  * after two idle seconds while it plays.
  */
-.bases-gallery-controls {
+.media-manager-controls {
 	position: absolute;
 	inset: auto 0 0;
 	display: flex;
 	flex-direction: column;
 	gap: var(--size-4-1);
-	padding: var(--size-4-12) var(--bases-gallery-chip-inset) var(--bases-gallery-chip-inset);
+	padding: var(--size-4-12) var(--media-manager-chip-inset) var(--media-manager-chip-inset);
 	background: linear-gradient(transparent, color-mix(in oklch, black 45%, transparent));
 	color: white;
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+	transition: opacity var(--media-manager-preview-fade-out) linear;
 }
 
-.bases-gallery-zoom-stage.is-ready:not(.is-idle) .bases-gallery-controls {
+.media-manager-zoom-stage.is-ready:not(.is-idle) .media-manager-controls {
 	opacity: 1;
 	pointer-events: auto;
-	transition-duration: var(--bases-gallery-preview-fade-in);
+	transition-duration: var(--media-manager-preview-fade-in);
 }
 
-.bases-gallery-controls-row {
+.media-manager-controls-row {
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
 }
 
-.bases-gallery-controls-spacer {
+.media-manager-controls-spacer {
 	flex: 1;
 }
 
-.bases-gallery-controls .bases-gallery-control,
-.bases-gallery-control-time {
+.media-manager-controls .media-manager-control,
+.media-manager-control-time {
 	--button-corner-shape: round;
 
 	display: flex;
 	flex: none;
 	align-items: center;
 	justify-content: center;
-	height: var(--bases-gallery-chip-size);
-	border-radius: var(--bases-gallery-chip-radius);
-	background: var(--bases-gallery-chip-fill);
+	height: var(--media-manager-chip-size);
+	border-radius: var(--media-manager-chip-radius);
+	background: var(--media-manager-chip-fill);
 	box-shadow: none;
 	color: inherit;
 }
 
-.bases-gallery-controls .bases-gallery-control {
-	width: var(--bases-gallery-chip-size);
+.media-manager-controls .media-manager-control {
+	width: var(--media-manager-chip-size);
 	padding: 0;
 	cursor: pointer;
 	transition: background-color var(--anim-duration-fast, 140ms);
 }
 
-.bases-gallery-controls .bases-gallery-control:hover {
-	background: var(--bases-gallery-chip-fill-hover);
+.media-manager-controls .media-manager-control:hover {
+	background: var(--media-manager-chip-fill-hover);
 }
 
-.bases-gallery-controls .bases-gallery-control:active {
+.media-manager-controls .media-manager-control:active {
 	transform: scale(0.94);
 }
 
-.bases-gallery-control svg {
-	width: var(--bases-gallery-chip-icon);
-	height: var(--bases-gallery-chip-icon);
+.media-manager-control svg {
+	width: var(--media-manager-chip-icon);
+	height: var(--media-manager-chip-icon);
 }
 
-.bases-gallery-control-time {
+.media-manager-control-time {
 	padding: 0 var(--size-4-3);
 	font-size: var(--font-ui-small);
 	font-variant-numeric: tabular-nums;
 }
 
-.bases-gallery-control-track {
-	--bases-gallery-track-height: var(--size-2-2);
+.media-manager-control-track {
+	--media-manager-track-height: var(--size-2-2);
 
 	position: relative;
 	height: var(--size-4-4);
@@ -301,35 +301,35 @@ video.bases-gallery-zoom-media {
 }
 
 /* The rail, the buffered range and the played range: three stacked bars. */
-.bases-gallery-control-track::before,
-.bases-gallery-control-buffered,
-.bases-gallery-control-played {
+.media-manager-control-track::before,
+.media-manager-control-buffered,
+.media-manager-control-played {
 	position: absolute;
 	inset: 0;
-	height: var(--bases-gallery-track-height);
+	height: var(--media-manager-track-height);
 	margin: auto 0;
-	border-radius: calc(var(--bases-gallery-track-height) / 2);
+	border-radius: calc(var(--media-manager-track-height) / 2);
 	transform-origin: left;
 	transition: height var(--anim-duration-fast, 140ms);
 }
 
-.bases-gallery-control-track::before {
+.media-manager-control-track::before {
 	content: "";
 	background: color-mix(in oklch, white 25%, transparent);
 }
 
-.bases-gallery-control-buffered {
+.media-manager-control-buffered {
 	background: color-mix(in oklch, white 40%, transparent);
 	transform: scaleX(var(--progress, 0));
 }
 
-.bases-gallery-control-played {
+.media-manager-control-played {
 	background: var(--interactive-accent);
 	transform: scaleX(var(--progress, 0));
 }
 
-.bases-gallery-control-track:hover {
-	--bases-gallery-track-height: var(--size-4-1);
+.media-manager-control-track:hover {
+	--media-manager-track-height: var(--size-4-1);
 }
 
 /*
@@ -338,29 +338,29 @@ video.bases-gallery-zoom-media {
  * starts: everything fades on the frame the video starts playing (Netflix:
  * 300 ms, linear), and fades out faster when the pointer leaves.
  */
-.bases-gallery,
-.bases-gallery-zoom-stage {
+/* On body: the zoom also opens images in notes, outside any gallery. */
+body {
 	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
-	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
+	--media-manager-zoom-margin: var(--header-height, var(--size-4-12));
 	/* The least space kept beside a filled photo or video. */
-	--bases-gallery-zoom-margin-x: var(--size-4-4);
-	--bases-gallery-radius: var(--radius-s);
-	--bases-gallery-chip-icon: var(--icon-xs);
+	--media-manager-zoom-margin-x: var(--size-4-4);
+	--media-manager-radius: var(--radius-s);
+	--media-manager-chip-icon: var(--icon-xs);
 	/* The icon plus padding on each side. */
-	--bases-gallery-chip-size: calc(var(--bases-gallery-chip-icon) + 2 * var(--size-4-2));
+	--media-manager-chip-size: calc(var(--media-manager-chip-icon) + 2 * var(--size-4-2));
 	/* Gap between a chip and the media's edge. */
-	--bases-gallery-chip-inset: var(--size-2-1);
-	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
-	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
+	--media-manager-chip-inset: var(--size-2-1);
+	--media-manager-chip-fill: color-mix(in oklch, black 55%, transparent);
+	--media-manager-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
 	/* The tile edge's hairline: --mono-100 is dark in light themes, light in dark ones. */
-	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, var(--mono-100) 10%, transparent);
+	--media-manager-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, var(--mono-100) 10%, transparent);
 	/* Properties panel beside a zoomed photo or video. */
-	--bases-gallery-details-width: 288px;
+	--media-manager-details-width: 288px;
 	/* Concentric with the media's corner: its radius less the gap. Drawn
 	   round, not as the squircle Obsidian gives buttons on macOS. */
-	--bases-gallery-chip-radius: max(0px, calc(var(--bases-gallery-radius) - var(--bases-gallery-chip-inset)));
-	--bases-gallery-preview-fade-in: 300ms;
-	--bases-gallery-preview-fade-out: 200ms;
+	--media-manager-chip-radius: max(0px, calc(var(--media-manager-radius) - var(--media-manager-chip-inset)));
+	--media-manager-preview-fade-in: 300ms;
+	--media-manager-preview-fade-out: 200ms;
 }
 
 /*
@@ -368,28 +368,28 @@ video.bases-gallery-zoom-media {
  * larger, rounder and still concentric: radius = corner radius - gap.
  * Translucent black with no edge, like YouTube's player.
  */
-.bases-gallery-zoom-stage {
-	--bases-gallery-zoom-radius: var(--radius-l);
-	--bases-gallery-chip-inset: var(--size-2-3);
-	--bases-gallery-chip-icon: var(--icon-m);
-	--bases-gallery-chip-radius: max(0px, calc(var(--bases-gallery-zoom-radius) - var(--bases-gallery-chip-inset)));
-	--bases-gallery-chip-fill: color-mix(in oklch, black 30%, transparent);
-	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 50%, transparent);
+.media-manager-zoom-stage {
+	--media-manager-zoom-radius: var(--radius-l);
+	--media-manager-chip-inset: var(--size-2-3);
+	--media-manager-chip-icon: var(--icon-m);
+	--media-manager-chip-radius: max(0px, calc(var(--media-manager-zoom-radius) - var(--media-manager-chip-inset)));
+	--media-manager-chip-fill: color-mix(in oklch, black 30%, transparent);
+	--media-manager-chip-fill-hover: color-mix(in oklch, black 50%, transparent);
 }
 
-.bases-gallery-preview {
+.media-manager-preview {
 	position: absolute;
 	inset: 0;
 	opacity: 0;
-	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+	transition: opacity var(--media-manager-preview-fade-out) linear;
 }
 
-.bases-gallery-tile.is-playing .bases-gallery-preview {
+.media-manager-tile.is-playing .media-manager-preview {
 	opacity: 1;
-	transition-duration: var(--bases-gallery-preview-fade-in);
+	transition-duration: var(--media-manager-preview-fade-in);
 }
 
-.bases-gallery-preview-video {
+.media-manager-preview-video {
 	display: block;
 	width: 100%;
 	height: 100%;
@@ -397,39 +397,39 @@ video.bases-gallery-zoom-media {
 }
 
 /* Scoped to the tile so they outrank Obsidian's own button:not(.clickable-icon) rule. */
-.bases-gallery-tile .bases-gallery-mute,
-.bases-gallery-tile .bases-gallery-duration {
+.media-manager-tile .media-manager-mute,
+.media-manager-tile .media-manager-duration {
 	position: absolute;
-	right: var(--bases-gallery-chip-inset);
-	bottom: var(--bases-gallery-chip-inset);
+	right: var(--media-manager-chip-inset);
+	bottom: var(--media-manager-chip-inset);
 	--button-corner-shape: round;
 
-	height: var(--bases-gallery-chip-size);
-	border-radius: var(--bases-gallery-chip-radius);
-	background: var(--bases-gallery-chip-fill);
-	box-shadow: var(--bases-gallery-chip-ring);
+	height: var(--media-manager-chip-size);
+	border-radius: var(--media-manager-chip-radius);
+	background: var(--media-manager-chip-fill);
+	box-shadow: var(--media-manager-chip-ring);
 	color: white;
 }
 
-.bases-gallery-tile .bases-gallery-mute {
+.media-manager-tile .media-manager-mute {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: var(--bases-gallery-chip-size);
+	width: var(--media-manager-chip-size);
 	padding: 0;
 	border: none;
 	cursor: pointer;
-	--icon-size: var(--bases-gallery-chip-icon);
+	--icon-size: var(--media-manager-chip-icon);
 	--icon-stroke: var(--icon-xs-stroke-width);
 }
 
-.bases-gallery-tile .bases-gallery-mute:hover {
-	background: var(--bases-gallery-chip-fill-hover);
-	box-shadow: var(--bases-gallery-chip-ring);
+.media-manager-tile .media-manager-mute:hover {
+	background: var(--media-manager-chip-fill-hover);
+	box-shadow: var(--media-manager-chip-ring);
 	color: white;
 }
 
-.bases-gallery-tile .bases-gallery-duration {
+.media-manager-tile .media-manager-duration {
 	display: flex;
 	align-items: center;
 	padding-inline: var(--size-4-2);
@@ -437,24 +437,24 @@ video.bases-gallery-zoom-media {
 	font-weight: var(--font-medium);
 	font-variant-numeric: tabular-nums;
 	pointer-events: none;
-	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+	transition: opacity var(--media-manager-preview-fade-out) linear;
 }
 
-.bases-gallery-tile.is-playing .bases-gallery-duration {
+.media-manager-tile.is-playing .media-manager-duration {
 	opacity: 0;
-	transition-duration: var(--bases-gallery-preview-fade-in);
+	transition-duration: var(--media-manager-preview-fade-in);
 }
 
-.bases-gallery-zoom-stage {
+.media-manager-zoom-stage {
 	/* The card sits this far in from the media's corner, and the info
 	   button this far in from the card's: each radius is the outer radius
 	   less the gap, so the three corners are concentric. */
-	--bases-gallery-card-inset: var(--size-2-2);
-	--bases-gallery-card-radius: max(0px, calc(var(--bases-gallery-zoom-radius) - var(--bases-gallery-card-inset)));
-	--bases-gallery-info-inset: var(--size-2-2);
-	--bases-gallery-info-radius: max(0px, calc(var(--bases-gallery-card-radius) - var(--bases-gallery-info-inset)));
+	--media-manager-card-inset: var(--size-2-2);
+	--media-manager-card-radius: max(0px, calc(var(--media-manager-zoom-radius) - var(--media-manager-card-inset)));
+	--media-manager-info-inset: var(--size-2-2);
+	--media-manager-info-radius: max(0px, calc(var(--media-manager-card-radius) - var(--media-manager-info-inset)));
 	/* From the media's edge to the info button's. */
-	--bases-gallery-info-offset: calc(var(--bases-gallery-card-inset) + var(--bases-gallery-info-inset));
+	--media-manager-info-offset: calc(var(--media-manager-card-inset) + var(--media-manager-info-inset));
 }
 
 /*
@@ -464,63 +464,63 @@ video.bases-gallery-zoom-media {
  * button; switched on, it stays (white) and the card shows the note's
  * visible properties, laid out like a Bases card.
  */
-.bases-gallery-zoom-stage .bases-gallery-zoom-info {
+.media-manager-zoom-stage .media-manager-zoom-info {
 	--button-corner-shape: round;
 
 	position: fixed;
-	top: calc(var(--frame-top) + var(--bases-gallery-info-offset));
-	left: calc(var(--frame-left) + var(--frame-width) - var(--bases-gallery-info-offset) - var(--bases-gallery-chip-size));
+	top: calc(var(--frame-top) + var(--media-manager-info-offset));
+	left: calc(var(--frame-left) + var(--frame-width) - var(--media-manager-info-offset) - var(--media-manager-chip-size));
 	z-index: 1;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: var(--bases-gallery-chip-size);
-	height: var(--bases-gallery-chip-size);
+	width: var(--media-manager-chip-size);
+	height: var(--media-manager-chip-size);
 	padding: 0;
-	border-radius: var(--bases-gallery-info-radius);
-	background: var(--bases-gallery-chip-fill);
+	border-radius: var(--media-manager-info-radius);
+	background: var(--media-manager-chip-fill);
 	box-shadow: none;
 	color: white;
 	cursor: pointer;
 	opacity: 0;
 	pointer-events: none;
 	transform: translateY(var(--zoom-ride, 0));
-	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+	transition: opacity var(--media-manager-preview-fade-out) linear;
 }
 
-.bases-gallery-zoom-stage .bases-gallery-zoom-info:hover {
-	background: var(--bases-gallery-chip-fill-hover);
+.media-manager-zoom-stage .media-manager-zoom-info:hover {
+	background: var(--media-manager-chip-fill-hover);
 }
 
 /* On a card: the card's own hover colour. */
-.bases-gallery-zoom-stage.has-details .bases-gallery-zoom-info,
-.bases-gallery-zoom-stage.is-peeking .bases-gallery-zoom-info {
+.media-manager-zoom-stage.has-details .media-manager-zoom-info,
+.media-manager-zoom-stage.is-peeking .media-manager-zoom-info {
 	background: transparent;
 	color: var(--icon-color);
 }
 
-.bases-gallery-zoom-stage.has-details .bases-gallery-zoom-info:hover,
-.bases-gallery-zoom-stage.is-peeking .bases-gallery-zoom-info:hover {
+.media-manager-zoom-stage.has-details .media-manager-zoom-info:hover,
+.media-manager-zoom-stage.is-peeking .media-manager-zoom-info:hover {
 	background: var(--background-modifier-hover);
 	color: var(--icon-color-hover);
 }
 
-.bases-gallery-zoom-stage .bases-gallery-zoom-info.is-active {
+.media-manager-zoom-stage .media-manager-zoom-info.is-active {
 	background: var(--background-modifier-active-hover);
 	color: var(--icon-color-active);
 }
 
-.bases-gallery-zoom-stage .bases-gallery-zoom-info:active {
+.media-manager-zoom-stage .media-manager-zoom-info:active {
 	transform: translateY(var(--zoom-ride, 0)) scale(0.94);
 }
 
-.bases-gallery-zoom-info svg {
-	width: var(--bases-gallery-chip-icon);
-	height: var(--bases-gallery-chip-icon);
+.media-manager-zoom-info svg {
+	width: var(--media-manager-chip-icon);
+	height: var(--media-manager-chip-icon);
 }
 
 /* Read by screen readers, not shown (an aria-label would also show a tooltip). */
-.bases-gallery-sr-only {
+.media-manager-sr-only {
 	position: absolute;
 	width: 1px;
 	height: 1px;
@@ -529,28 +529,28 @@ video.bases-gallery-zoom-media {
 	opacity: 0;
 }
 
-.bases-gallery-zoom-stage.is-ready:not(.is-idle):has(.bases-gallery-zoom-box:hover, .bases-gallery-zoom-info:hover, .bases-gallery-details:hover) .bases-gallery-zoom-info,
-.bases-gallery-zoom-stage.is-ready.has-details .bases-gallery-zoom-info,
-.bases-gallery-zoom-stage.is-ready.is-peeking .bases-gallery-zoom-info {
+.media-manager-zoom-stage.is-ready:not(.is-idle):has(.media-manager-zoom-box:hover, .media-manager-zoom-info:hover, .media-manager-details:hover) .media-manager-zoom-info,
+.media-manager-zoom-stage.is-ready.has-details .media-manager-zoom-info,
+.media-manager-zoom-stage.is-ready.is-peeking .media-manager-zoom-info {
 	opacity: 1;
 	pointer-events: auto;
-	transition-duration: var(--bases-gallery-preview-fade-in);
+	transition-duration: var(--media-manager-preview-fade-in);
 }
 
-.bases-gallery-details {
-	--bases-gallery-card-width: min(var(--bases-gallery-details-width), calc(var(--frame-width) - 2 * var(--bases-gallery-card-inset)));
+.media-manager-details {
+	--media-manager-card-width: min(var(--media-manager-details-width), calc(var(--frame-width) - 2 * var(--media-manager-card-inset)));
 
 	position: fixed;
-	top: calc(var(--frame-top) + var(--bases-gallery-card-inset));
-	left: calc(var(--frame-left) + var(--frame-width) - var(--bases-gallery-card-inset) - var(--bases-gallery-card-width));
+	top: calc(var(--frame-top) + var(--media-manager-card-inset));
+	left: calc(var(--frame-left) + var(--frame-width) - var(--media-manager-card-inset) - var(--media-manager-card-width));
 	display: flex;
 	flex-direction: column;
 	gap: var(--size-4-2);
-	width: var(--bases-gallery-card-width);
-	max-height: calc(var(--frame-height) - 2 * var(--bases-gallery-card-inset));
+	width: var(--media-manager-card-width);
+	max-height: calc(var(--frame-height) - 2 * var(--media-manager-card-inset));
 	overflow-y: auto;
-	padding: var(--bases-gallery-info-inset) 0 var(--size-4-2);
-	border-radius: var(--bases-gallery-card-radius);
+	padding: var(--media-manager-info-inset) 0 var(--size-4-2);
+	border-radius: var(--media-manager-card-radius);
 	background: var(--bases-cards-background, var(--background-primary));
 	box-shadow: var(--bases-cards-shadow);
 	color: var(--text-normal);
@@ -558,25 +558,25 @@ video.bases-gallery-zoom-media {
 	opacity: 0;
 	pointer-events: none;
 	transform: translateY(var(--zoom-ride, 0));
-	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+	transition: opacity var(--media-manager-preview-fade-out) linear;
 }
 
-.bases-gallery-zoom-stage.is-ready.has-details .bases-gallery-details,
-.bases-gallery-zoom-stage.is-ready.is-peeking .bases-gallery-details {
+.media-manager-zoom-stage.is-ready.has-details .media-manager-details,
+.media-manager-zoom-stage.is-ready.is-peeking .media-manager-details {
 	opacity: 1;
 	pointer-events: auto;
-	transition-duration: var(--bases-gallery-preview-fade-in);
+	transition-duration: var(--media-manager-preview-fade-in);
 }
 
 /* The title shares the top row with the info button and ends in an ellipsis before it. */
-.bases-gallery-detail.is-title {
+.media-manager-detail.is-title {
 	display: flex;
 	align-items: center;
-	min-height: var(--bases-gallery-chip-size);
-	padding-right: calc(var(--bases-gallery-chip-size) + var(--bases-gallery-info-inset));
+	min-height: var(--media-manager-chip-size);
+	padding-right: calc(var(--media-manager-chip-size) + var(--media-manager-info-inset));
 }
 
-.bases-gallery-detail.is-title .bases-gallery-detail-value {
+.media-manager-detail.is-title .media-manager-detail-value {
 	display: block;
 	flex: 1;
 	min-width: 0;
@@ -587,7 +587,7 @@ video.bases-gallery-zoom-media {
 }
 
 /* The Cards view's property layout: a muted label over the value, the first property as the title. */
-.bases-gallery-detail-label {
+.media-manager-detail-label {
 	padding: 0 var(--size-4-2);
 	overflow: hidden;
 	color: var(--text-muted);
@@ -596,7 +596,7 @@ video.bases-gallery-zoom-media {
 	text-overflow: ellipsis;
 }
 
-.bases-gallery-detail-value {
+.media-manager-detail-value {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
@@ -605,12 +605,12 @@ video.bases-gallery-zoom-media {
 	overflow-wrap: anywhere;
 }
 
-.bases-gallery-detail-value:empty::before {
+.media-manager-detail-value:empty::before {
 	content: "\2014";
 	color: var(--text-faint);
 }
 
-.bases-gallery-detail.is-title .bases-gallery-detail-value {
+.media-manager-detail.is-title .media-manager-detail-value {
 	font-size: var(--font-ui-medium);
 	font-weight: calc(var(--font-weight) + var(--bold-modifier));
 }
@@ -620,17 +620,17 @@ video.bases-gallery-zoom-media {
  * Obsidian's own PDF viewer fades in over the page 1 thumbnail once the box
  * has arrived, and fades out before the box shrinks back.
  */
-.bases-gallery-tile .bases-gallery-pages {
+.media-manager-tile .media-manager-pages {
 	gap: var(--size-2-2);
-	--icon-size: var(--bases-gallery-chip-icon);
+	--icon-size: var(--media-manager-chip-icon);
 	--icon-stroke: var(--icon-xs-stroke-width);
 }
 
-.bases-gallery-pages-icon {
+.media-manager-pages-icon {
 	display: flex;
 }
 
-.bases-gallery-zoom-pdf {
+.media-manager-zoom-pdf {
 	position: absolute;
 	inset: 0;
 	overflow: hidden;
@@ -640,28 +640,28 @@ video.bases-gallery-zoom-media {
 	transition: opacity var(--anim-duration-fast, 140ms) linear;
 }
 
-.bases-gallery-zoom-pdf.is-loaded {
+.media-manager-zoom-pdf.is-loaded {
 	opacity: 1;
 }
 
 /* The embed renders inside a paragraph; drop its margins so it fills the box. */
-.bases-gallery-zoom-pdf > * {
+.media-manager-zoom-pdf > * {
 	margin: 0;
 }
 
 /* The PDF viewer's toolbar runs along the top, so the card and its
    button nest in the bottom-right corner instead. */
-.bases-gallery-zoom-box.is-pdf ~ .bases-gallery-zoom-info {
-	top: calc(var(--frame-top) + var(--frame-height) - var(--bases-gallery-info-offset) - var(--bases-gallery-chip-size));
+.media-manager-zoom-box.is-pdf ~ .media-manager-zoom-info {
+	top: calc(var(--frame-top) + var(--frame-height) - var(--media-manager-info-offset) - var(--media-manager-chip-size));
 }
 
-.bases-gallery-zoom-box.is-pdf ~ .bases-gallery-details {
+.media-manager-zoom-box.is-pdf ~ .media-manager-details {
 	top: auto;
-	bottom: calc(100% - var(--frame-top) - var(--frame-height) + var(--bases-gallery-card-inset));
-	padding-bottom: calc(var(--bases-gallery-chip-size) + 2 * var(--bases-gallery-info-inset));
+	bottom: calc(100% - var(--frame-top) - var(--frame-height) + var(--media-manager-card-inset));
+	padding-bottom: calc(var(--media-manager-chip-size) + 2 * var(--media-manager-info-inset));
 }
 
-.bases-gallery-zoom-box.is-pdf ~ .bases-gallery-details .bases-gallery-detail.is-title {
+.media-manager-zoom-box.is-pdf ~ .media-manager-details .media-manager-detail.is-title {
 	padding-right: 0;
 }
 
@@ -670,39 +670,39 @@ video.bases-gallery-zoom-media {
  * The embedded base's own header (view name, sort, filter) is hidden here
  * only: it has no option to turn it off.
  */
-.bases-gallery-detail-map {
-	height: var(--bases-gallery-map-height);
+.media-manager-detail-map {
+	height: var(--media-manager-map-height);
 	margin-bottom: calc(-1 * var(--size-4-2));
 	overflow: hidden;
 	background: var(--background-secondary);
 	border-radius: 0 0 var(--bases-cards-radius, var(--radius-m)) var(--bases-cards-radius, var(--radius-m));
 }
 
-.bases-gallery-detail-map .bases-header {
+.media-manager-detail-map .bases-header {
 	display: none;
 }
 
 /* The map credit (required by OpenStreetMap and OpenFreeMap) stays as
    MapLibre's small info button, and shows in full on hover. */
-.bases-gallery-detail-map .maplibregl-ctrl-attrib.maplibregl-compact {
+.media-manager-detail-map .maplibregl-ctrl-attrib.maplibregl-compact {
 	margin: var(--size-2-2);
 }
 
-.bases-gallery-detail-map .maplibregl-ctrl-attrib.maplibregl-compact:not(:hover) .maplibregl-ctrl-attrib-inner {
+.media-manager-detail-map .maplibregl-ctrl-attrib.maplibregl-compact:not(:hover) .maplibregl-ctrl-attrib-inner {
 	display: none;
 }
 
 /* Previous / next: the new media replaces the old in place, with a short fade. */
-.bases-gallery-zoom-stage.is-swapping .bases-gallery-zoom-box,
-.bases-gallery-zoom-stage.is-swapping .bases-gallery-zoom-media {
+.media-manager-zoom-stage.is-swapping .media-manager-zoom-box,
+.media-manager-zoom-stage.is-swapping .media-manager-zoom-media {
 	transition: none;
 }
 
-.bases-gallery-zoom-box.is-swapped .bases-gallery-zoom-media {
-	animation: bases-gallery-swap-in var(--bases-gallery-preview-fade-out) ease-out;
+.media-manager-zoom-box.is-swapped .media-manager-zoom-media {
+	animation: media-manager-swap-in var(--media-manager-preview-fade-out) ease-out;
 }
 
-@keyframes bases-gallery-swap-in {
+@keyframes media-manager-swap-in {
 	from {
 		opacity: 0;
 	}

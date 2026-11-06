@@ -1,8 +1,8 @@
-# Bases Gallery
+# Media Manager
 
 ## Project overview
 
-- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript), plugin id `bases-gallery`.
+- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript), plugin id `media-manager`.
 - Adds a **Gallery** layout to Bases through the public `registerBasesView` API (`src/main.ts`, `src/view/gallery-view.ts`). Requires Obsidian 1.13.0+ (`minAppVersion`).
 - Use only Obsidian's public, typed API from the `obsidian` package. No private or undocumented APIs, no monkey-patching of Obsidian internals, no casts to reach unexported members.
 - Entry point: `src/main.ts` compiled to `main.js` and loaded by Obsidian.
@@ -85,23 +85,23 @@ npm run build
 - `npm test` runs the Node test runner over `scripts/*.test.mjs` and `test/*.test.mjs` (layouts, header parsing, local deploy).
 - Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` to:
     ```
-    <Vault>/.obsidian/plugins/bases-gallery/
+    <Vault>/.obsidian/plugins/media-manager/
     ```
 - Reload Obsidian and enable the plugin in **Settings → Community plugins**.
 
 ### Development vault
 
-The repo lives inside its test vault, the same way as Custom Views: the vault is `~/Projects/bases-gallery` and this repo is its `.obsidian/plugins/bases-gallery` folder, so every build is already installed. The Hot Reload plugin in that vault reloads the plugin when `main.js` or `styles.css` changes. The vault's notes and media (Unsplash photos, Pexels videos) are outside this repo and not committed.
+The repo lives inside its test vault, the same way as Custom Views: the vault is `~/Projects/bases-gallery` and this repo is its `.obsidian/plugins/media-manager` folder, so every build is already installed. The Hot Reload plugin in that vault reloads the plugin when `main.js` or `styles.css` changes. The vault's notes and media (Unsplash photos, Pexels videos) are outside this repo and not committed.
 
 ### Local development deployment (other vaults)
 
 After the first manual install, list the installed plugin folders in a gitignored `.local-deploy.json`:
 
 ```json
-{ "targets": ["/path/to/Vault/.obsidian/plugins/bases-gallery"] }
+{ "targets": ["/path/to/Vault/.obsidian/plugins/media-manager"] }
 ```
 
-Successful `npm run build` and `npm run dev` builds then copy JS, CSS and manifest to every target. Dev mode also rebuilds on `styles.css` and `manifest.json` changes. For a one-off copy without a build, run `npm run sync:local`. A target is refused unless its `manifest.json` id is `bases-gallery`. `data.json` and other vault files are never copied. Replaced files are backed up in `.local-deploy-backups/`. Check for the `[local deploy]` line before reporting an install; the sync installs files but does not reload the running app (use the Hot Reload plugin or reload Obsidian).
+Successful `npm run build` and `npm run dev` builds then copy JS, CSS and manifest to every target. Dev mode also rebuilds on `styles.css` and `manifest.json` changes. For a one-off copy without a build, run `npm run sync:local`. A target is refused unless its `manifest.json` id is `media-manager`. `data.json` and other vault files are never copied. Replaced files are backed up in `.local-deploy-backups/`. Check for the `[local deploy]` line before reporting an install; the sync installs files but does not reload the running app (use the Hot Reload plugin or reload Obsidian).
 
 ## Commands & settings
 

@@ -7,7 +7,7 @@ const SEEK_SMALL = 5;
 const SEEK_LARGE = 10;
 const VOLUME_STEP = 0.1;
 /** Local-storage key for the mute state, shared with the hover preview. */
-export const MUTED_KEY = 'bases-gallery-muted';
+export const MUTED_KEY = 'media-manager-muted';
 
 export interface PlayerHost {
 	app: App;
@@ -52,16 +52,16 @@ export class VideoControls extends Component {
 		super();
 		// YouTube's layout: the scrub bar across the full width, and under it
 		// a row of play, mute and time on the left, fullscreen on the right.
-		this.el = parentEl.createDiv('bases-gallery-controls');
-		this.trackEl = this.el.createDiv({ cls: 'bases-gallery-control-track', attr: { role: 'slider', tabindex: '0', 'aria-label': 'Seek' } });
-		this.bufferedEl = this.trackEl.createDiv('bases-gallery-control-buffered');
-		this.playedEl = this.trackEl.createDiv('bases-gallery-control-played');
-		this.rowEl = this.el.createDiv('bases-gallery-controls-row');
-		this.playEl = this.button('bases-gallery-control-play');
-		this.muteEl = this.button('bases-gallery-control-mute');
-		this.timeEl = this.rowEl.createDiv('bases-gallery-control-time');
-		this.rowEl.createDiv('bases-gallery-controls-spacer');
-		this.fullscreenEl = this.button('bases-gallery-control-fullscreen');
+		this.el = parentEl.createDiv('media-manager-controls');
+		this.trackEl = this.el.createDiv({ cls: 'media-manager-control-track', attr: { role: 'slider', tabindex: '0', 'aria-label': 'Seek' } });
+		this.bufferedEl = this.trackEl.createDiv('media-manager-control-buffered');
+		this.playedEl = this.trackEl.createDiv('media-manager-control-played');
+		this.rowEl = this.el.createDiv('media-manager-controls-row');
+		this.playEl = this.button('media-manager-control-play');
+		this.muteEl = this.button('media-manager-control-mute');
+		this.timeEl = this.rowEl.createDiv('media-manager-control-time');
+		this.rowEl.createDiv('media-manager-controls-spacer');
+		this.fullscreenEl = this.button('media-manager-control-fullscreen');
 	}
 
 	onload(): void {
@@ -237,6 +237,6 @@ export class VideoControls extends Component {
 	}
 
 	private button(cls: string): HTMLElement {
-		return this.rowEl.createEl('button', { cls: `bases-gallery-control ${cls}`, attr: { type: 'button' } });
+		return this.rowEl.createEl('button', { cls: `media-manager-control ${cls}`, attr: { type: 'button' } });
 	}
 }

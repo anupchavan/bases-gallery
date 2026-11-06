@@ -3,7 +3,7 @@ import { MUTED_KEY } from './player';
 
 /** Pointer rest before a preview starts. */
 export const HOVER_DELAY_MS = 500;
-/** Must match --bases-gallery-preview-fade-out. */
+/** Must match --media-manager-preview-fade-out. */
 const FADE_OUT_MS = 200;
 
 /**
@@ -29,10 +29,10 @@ export class HoverPreview extends Component {
 	constructor(private readonly app: App) {
 		super();
 		this.muted = this.app.loadLocalStorage(MUTED_KEY) !== 'false';
-		this.layerEl = createDiv('bases-gallery-preview');
+		this.layerEl = createDiv('media-manager-preview');
 		this.videoEl = this.makeVideo();
 		this.muteEl = this.layerEl.createEl('button', {
-			cls: 'bases-gallery-mute',
+			cls: 'media-manager-mute',
 			attr: { type: 'button' },
 		});
 		this.renderMute();
@@ -76,7 +76,7 @@ export class HoverPreview extends Component {
 		this.fadingEl = null;
 		tileEl.removeClass('is-playing', 'is-previewing');
 		const video = this.videoEl;
-		video.removeClass('bases-gallery-preview-video');
+		video.removeClass('media-manager-preview-video');
 		this.videoEl = this.makeVideo();
 		this.layerEl.detach();
 		return video;
@@ -149,7 +149,7 @@ export class HoverPreview extends Component {
 
 	private makeVideo(): HTMLVideoElement {
 		const video = createEl('video', {
-			cls: 'bases-gallery-preview-video',
+			cls: 'media-manager-preview-video',
 			attr: { playsinline: '', preload: 'none', disablepictureinpicture: '', 'aria-hidden': 'true' },
 		});
 		video.loop = true;

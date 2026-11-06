@@ -2,7 +2,7 @@
  * The plugin's IndexedDB database: per device, never synced. Holds media
  * sizes and thumbnails, both safe to lose.
  */
-const DB_NAME = 'bases-gallery';
+const DB_NAME = 'media-manager';
 const VERSION = 2;
 export const SIZES = 'sizes';
 export const THUMBS = 'thumbs';

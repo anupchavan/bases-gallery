@@ -1,9 +1,9 @@
 {
-	"id": "bases-gallery",
-	"name": "Bases Gallery",
+	"id": "media-manager",
+	"name": "Media Manager",
 	"version": "0.1.0",
 	"minAppVersion": "1.13.0",
-	"description": "Adds a gallery layout to Bases.",
+	"description": "Manage media files as Markdown notes.",
 	"author": "Anup Chavan",
 	"authorUrl": "https://github.com/anupchavan",
 	"isDesktopOnly": false

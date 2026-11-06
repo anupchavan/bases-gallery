@@ -1,5 +1,5 @@
 // Copies the build into local test vaults listed in the gitignored .local-deploy.json:
-//   { "targets": ["/path/to/Vault/.obsidian/plugins/bases-gallery"] }
+//   { "targets": ["/path/to/Vault/.obsidian/plugins/media-manager"] }
 // Each target must already hold an installed copy (its manifest.json id must match),
 // so a typo cannot write into the wrong folder. data.json is never touched.
 import { readFile, writeFile, mkdir, rename, rm } from 'node:fs/promises';

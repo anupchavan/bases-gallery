@@ -6,12 +6,12 @@ import { join } from 'node:path';
 import { syncLocal } from './sync-local.mjs';
 
 async function fixture(t) {
-	const root = await mkdtemp(join(tmpdir(), 'bases-gallery-deploy-test-'));
+	const root = await mkdtemp(join(tmpdir(), 'media-manager-deploy-test-'));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	const target = join(root, 'installed');
 	await mkdir(target);
 	for (const dir of [root, target]) {
-		await writeFile(join(dir, 'manifest.json'), JSON.stringify({ id: 'bases-gallery' }));
+		await writeFile(join(dir, 'manifest.json'), JSON.stringify({ id: 'media-manager' }));
 		await writeFile(join(dir, 'main.js'), dir === root ? 'new JS' : 'old JS');
 		await writeFile(join(dir, 'styles.css'), dir === root ? 'new CSS' : 'old CSS');
 	}

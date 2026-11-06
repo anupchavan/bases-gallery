@@ -13,7 +13,7 @@ const SCROLL_CLOSE_DELAY_MS = 150;
  * into fullscreen over several resizes, and each one snaps.
  */
 const REFIT_SETTLE_MS = 400;
-/** Must match --bases-gallery-dark-fade: the fade to black before fullscreen. */
+/** Must match --media-manager-dark-fade: the fade to black before fullscreen. */
 const DARKEN_MS = 150;
 /** How long the properties preview waits for the pointer to reach the panel. */
 const PEEK_GRACE_MS = 200;
@@ -88,9 +88,9 @@ export class FillZoom extends Component {
 	/** The tile's box, in window coordinates when the zoom opened. */
 	private base: Rect | null = null;
 	private natural = { width: 0, height: 0 };
-	/** Space kept above and below the media, from --bases-gallery-zoom-margin. */
+	/** Space kept above and below the media, from --media-manager-zoom-margin. */
 	private margin = 0;
-	/** The least space kept beside the media, from --bases-gallery-zoom-margin-x. */
+	/** The least space kept beside the media, from --media-manager-zoom-margin-x. */
 	private marginX = 0;
 	private scope: Scope | null = null;
 	private closing = false;
@@ -144,8 +144,10 @@ export class FillZoom extends Component {
 		const startScroll = scroller?.scrollTop ?? 0;
 		const tileStyle = tileEl.win.getComputedStyle(tileEl);
 		const px = (name: string): number => parseFloat(tileStyle.getPropertyValue(name)) || 0;
-		this.margin = px('--bases-gallery-zoom-margin');
-		this.marginX = px('--bases-gallery-zoom-margin-x');
+		this.margin = px('--media-manager-zoom-margin');
+		this.marginX = px('--media-manager-zoom-margin-x');
+		// The box starts with the source's own corners (a tile, or an image in a note).
+		const startRadius = tileStyle.borderTopLeftRadius;
 		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
 		const video = media.kind === 'video' ? (options.takeVideo?.() ?? null) : null;
@@ -157,9 +159,9 @@ export class FillZoom extends Component {
 		// Swapping keeps the page (and fullscreen): only the media and its
 		// controls are rebuilt.
 		const kept = replacing ? this.clearForSwap() : null;
-		const overlay = kept?.overlay ?? doc.body.createDiv('bases-gallery-zoom-overlay');
-		const stage = kept?.stage ?? doc.body.createDiv('bases-gallery-zoom-stage');
-		const box = stage.createDiv('bases-gallery-zoom-box');
+		const overlay = kept?.overlay ?? doc.body.createDiv('media-manager-zoom-overlay');
+		const stage = kept?.stage ?? doc.body.createDiv('media-manager-zoom-stage');
+		const box = stage.createDiv('media-manager-zoom-box');
 		if (kept) {
 			// Already in place: no growing, just a short fade of the new media.
 			stage.addClass('is-swapping');
@@ -172,14 +174,15 @@ export class FillZoom extends Component {
 					? this.pdfClone(box, shown)
 					: this.imageClone(box, media, shown);
 		box.toggleClass('is-pdf', media.kind === 'pdf');
-		clone.addClass('bases-gallery-zoom-media');
+		clone.addClass('media-manager-zoom-media');
 		box.setCssProps({
 			'--zoom-left': `${base.left}px`,
 			'--zoom-top': `${base.top}px`,
 			'--zoom-width': `${base.width}px`,
 			'--zoom-height': `${base.height}px`,
+			'--zoom-start-radius': startRadius,
 		});
-		tileEl.addClass('is-zoom-source');
+		tileEl.addClass('media-manager-zoom-source');
 		this.overlayEl = overlay;
 		this.stageEl = stage;
 		this.boxEl = box;
@@ -354,7 +357,7 @@ export class FillZoom extends Component {
 	private showPdf(session: Component, box: HTMLElement, media: ZoomMedia): void {
 		const file = media.file;
 		if (!file || this.pdfEl) return;
-		const el = createDiv('bases-gallery-zoom-pdf');
+		const el = createDiv('media-manager-zoom-pdf');
 		// Under the info button.
 		box.insertBefore(el, this.infoEl);
 		this.pdfEl = el;
@@ -453,7 +456,7 @@ export class FillZoom extends Component {
 		stage: HTMLElement,
 		render: (el: HTMLElement, owner: Component) => DetailsContent | null,
 	): void {
-		const panel = stage.createDiv('bases-gallery-details');
+		const panel = stage.createDiv('media-manager-details');
 		const content = render(panel, session);
 		if (!content) {
 			panel.detach();
@@ -462,10 +465,10 @@ export class FillZoom extends Component {
 		// Heavy parts (a map) wait until the panel first shows on screen.
 		this.onDetailsShown = content.onShown ?? null;
 		// After the card, so it draws on top: it sits inside the card's corner.
-		const info = stage.createEl('button', { cls: 'bases-gallery-zoom-info', attr: { type: 'button' } });
+		const info = stage.createEl('button', { cls: 'media-manager-zoom-info', attr: { type: 'button' } });
 		setIcon(info, 'info');
 		// No aria-label: Obsidian would show it as a tooltip.
-		info.createSpan({ cls: 'bases-gallery-sr-only', text: 'Properties' });
+		info.createSpan({ cls: 'media-manager-sr-only', text: 'Properties' });
 		this.infoEl = info;
 		this.detailsEl = panel;
 		this.showDetails(this.detailsOn);
@@ -594,7 +597,7 @@ export class FillZoom extends Component {
 			clone.removeAttribute('src');
 			clone.load();
 		}
-		this.sourceEl?.removeClass('is-zoom-source');
+		this.sourceEl?.removeClass('media-manager-zoom-source');
 		this.cloneEl = null;
 		this.pdfEl = null;
 		this.boxEl = null;

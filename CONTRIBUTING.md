@@ -1,4 +1,4 @@
-# Contributing to Bases Gallery
+# Contributing to Media Manager
 
 ## Development setup
 
@@ -6,12 +6,12 @@ You need Node.js 22.13 or later in the 22 line, or Node.js 24 or later, and an O
 
 ```bash
 git clone https://github.com/anupchavan/bases-gallery.git
-cd bases-gallery
+cd media-manager
 npm install
 npm run dev
 ```
 
-Copy `main.js`, `manifest.json` and `styles.css` into `<Vault>/.obsidian/plugins/bases-gallery/` of a test vault and enable the plugin in **Settings → Community plugins**. To have every build copy itself there, create a gitignored `.local-deploy.json` (see "Local development deployment" in [AGENTS.md](AGENTS.md)).
+Copy `main.js`, `manifest.json` and `styles.css` into `<Vault>/.obsidian/plugins/media-manager/` of a test vault and enable the plugin in **Settings → Community plugins**. To have every build copy itself there, create a gitignored `.local-deploy.json` (see "Local development deployment" in [AGENTS.md](AGENTS.md)).
 
 | Command              | What it does                                 |
 | -------------------- | -------------------------------------------- |

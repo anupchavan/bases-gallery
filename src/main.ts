@@ -3,8 +3,9 @@ import { releasePdfWorker } from './media/pdf';
 import { DEFAULT_SETTINGS, GallerySettingTab, GallerySettings } from './settings';
 import { GALLERY_VIEW_TYPE, GalleryView } from './view/gallery-view';
 import { galleryViewOptions } from './view/options';
+import { NoteImageZoom } from './zoom/note-images';
 
-export default class BasesGalleryPlugin extends Plugin {
+export default class MediaManagerPlugin extends Plugin {
 	settings: GallerySettings = { ...DEFAULT_SETTINGS };
 	private readonly views = new Set<GalleryView>();
 
@@ -16,6 +17,7 @@ export default class BasesGalleryPlugin extends Plugin {
 			options: galleryViewOptions,
 		});
 		this.addSettingTab(new GallerySettingTab(this.app, this));
+		this.addChild(new NoteImageZoom(this.app, () => this.settings.zoomNoteImages));
 		// Shown only while a photo or video is zoomed. Mod+←/→ (and ←/→ on
 		// photos) already work in the zoom; these let people bind their own
 		// keys in Settings → Hotkeys.

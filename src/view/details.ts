@@ -33,9 +33,9 @@ export function renderDetails(
 ): DetailsContent | null {
 	const order = config.getOrder();
 	order.forEach((propertyId, i) => {
-		const row = el.createDiv(i === 0 ? 'bases-gallery-detail is-title' : 'bases-gallery-detail');
-		if (i > 0) row.createDiv({ cls: 'bases-gallery-detail-label', text: config.getDisplayName(propertyId) });
-		const line = row.createDiv('bases-gallery-detail-value');
+		const row = el.createDiv(i === 0 ? 'media-manager-detail is-title' : 'media-manager-detail');
+		if (i > 0) row.createDiv({ cls: 'media-manager-detail-label', text: config.getDisplayName(propertyId) });
+		const line = row.createDiv('media-manager-detail-value');
 		const value = entry.getValue(propertyId);
 		if (value && !(value instanceof NullValue)) value.renderTo(line, app.renderContext);
 	});
@@ -46,8 +46,8 @@ export function renderDetails(
 
 	// The slot has its final height from the start, so the panel doesn't
 	// jump while Maps lays out (it first draws at its default height).
-	const mapEl = el.createDiv('bases-gallery-detail-map');
-	mapEl.setCssProps({ '--bases-gallery-map-height': `${MAP_HEIGHT}px` });
+	const mapEl = el.createDiv('media-manager-detail-map');
+	mapEl.setCssProps({ '--media-manager-map-height': `${MAP_HEIGHT}px` });
 	return {
 		onShown: () => {
 			const source = mapBase(entry.file.path, locationProperty);

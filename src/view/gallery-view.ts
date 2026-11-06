@@ -1,5 +1,5 @@
 import { BasesEntry, BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
-import type BasesGalleryPlugin from '../main';
+import type MediaManagerPlugin from '../main';
 import { FillZoom } from '../zoom/fill';
 import { HoverPreview } from '../video/hover-preview';
 import type { Size } from '../media/dimensions';
@@ -123,17 +123,17 @@ export class GalleryView extends BasesView {
 	constructor(
 		controller: QueryController,
 		scrollEl: HTMLElement,
-		private readonly plugin: BasesGalleryPlugin,
+		private readonly plugin: MediaManagerPlugin,
 	) {
 		super(controller);
-		this.rootEl = scrollEl.createDiv('bases-gallery');
-		this.sizerEl = this.rootEl.createDiv('bases-gallery-sizer');
+		this.rootEl = scrollEl.createDiv('media-manager');
+		this.sizerEl = this.rootEl.createDiv('media-manager-sizer');
 		this.loaderEl = this.rootEl.createDiv({
-			cls: 'bases-gallery-loader',
+			cls: 'media-manager-loader',
 			attr: { role: 'status', 'aria-label': 'Loading more' },
 		});
 		this.loaderEl.hide();
-		this.emptyEl = this.rootEl.createDiv('bases-gallery-empty');
+		this.emptyEl = this.rootEl.createDiv('media-manager-empty');
 		this.emptyEl.hide();
 	}
 
@@ -408,7 +408,7 @@ export class GalleryView extends BasesView {
 	private onTileClick(evt: MouseEvent): void {
 		const target = evt.target;
 		if (!(target instanceof HTMLElement)) return;
-		const tileEl = target.closest('.bases-gallery-tile');
+		const tileEl = target.closest('.media-manager-tile');
 		if (!tileEl) return;
 		let tile: Tile | null = null;
 		for (const t of this.mounted.values()) {
@@ -492,7 +492,7 @@ export class GalleryView extends BasesView {
 	private onPointerOver(evt: PointerEvent): void {
 		if (evt.pointerType === 'touch') return;
 		const target = evt.target;
-		const tileEl = target instanceof HTMLElement ? target.closest<HTMLElement>('.bases-gallery-tile') : null;
+		const tileEl = target instanceof HTMLElement ? target.closest<HTMLElement>('.media-manager-tile') : null;
 		const tile = tileEl ? this.tileFor(tileEl) : null;
 		const item = tile ? this.items[tile.index] : undefined;
 		if (!tileEl || !item || item.media.kind !== 'video') {
@@ -603,7 +603,7 @@ export class GalleryView extends BasesView {
 		this.layout = placed(boxes);
 		this.lastLayoutMs = performance.now() - started;
 		this.sizerEl.setCssProps({
-			'--bases-gallery-height': `${this.layout.height}px`,
+			'--media-manager-height': `${this.layout.height}px`,
 		});
 		this.restoreAnchor(anchor);
 	}

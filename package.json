@@ -1,7 +1,7 @@
 {
-	"name": "bases-gallery",
+	"name": "media-manager",
 	"version": "0.1.0",
-	"description": "Gallery layout for Obsidian Bases",
+	"description": "Manage media files as Markdown notes.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {

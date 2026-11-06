@@ -27,7 +27,7 @@ export class Tile {
 		parentEl: HTMLElement,
 		private readonly onRatio: (src: string, ratio: number) => void,
 	) {
-		this.el = parentEl.createDiv('bases-gallery-tile');
+		this.el = parentEl.createDiv('media-manager-tile');
 	}
 
 	/**
@@ -80,7 +80,7 @@ export class Tile {
 		const video =
 			this.hdrPosterEl ??
 			this.el.createEl('video', {
-				cls: 'bases-gallery-media bases-gallery-hdr-poster',
+				cls: 'media-manager-media media-manager-hdr-poster',
 				attr: { playsinline: '', preload: 'auto', 'aria-hidden': 'true' },
 			});
 		video.muted = true;
@@ -103,7 +103,7 @@ export class Tile {
 	}
 
 	private showIcon(kind: 'video' | 'pdf'): void {
-		this.iconEl ??= createDiv('bases-gallery-tile-icon');
+		this.iconEl ??= createDiv('media-manager-tile-icon');
 		if (this.iconKind !== kind) {
 			setIcon(this.iconEl, kind === 'pdf' ? 'file-text' : 'film');
 			this.iconKind = kind;
@@ -120,7 +120,7 @@ export class Tile {
 			this.durationEl?.detach();
 			return;
 		}
-		this.durationEl ??= createDiv('bases-gallery-duration');
+		this.durationEl ??= createDiv('media-manager-duration');
 		this.durationEl.setText(formatDuration(seconds));
 		if (this.durationEl.parentElement !== this.el) this.el.appendChild(this.durationEl);
 	}
@@ -132,8 +132,8 @@ export class Tile {
 			return;
 		}
 		if (!this.pagesEl || !this.pagesTextEl) {
-			this.pagesEl = createDiv('bases-gallery-duration bases-gallery-pages');
-			setIcon(this.pagesEl.createSpan('bases-gallery-pages-icon'), 'file-text');
+			this.pagesEl = createDiv('media-manager-duration media-manager-pages');
+			setIcon(this.pagesEl.createSpan('media-manager-pages-icon'), 'file-text');
 			this.pagesTextEl = this.pagesEl.createSpan();
 		}
 		this.pagesTextEl.setText(String(pages));
@@ -183,7 +183,7 @@ export class Tile {
 			return this.imgEl;
 		}
 		const img = this.el.createEl('img', {
-			cls: 'bases-gallery-media',
+			cls: 'media-manager-media',
 			attr: { alt: '', decoding: 'async', draggable: 'false' },
 		});
 		img.addEventListener('load', () => {
