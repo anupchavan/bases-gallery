@@ -7,7 +7,7 @@ import { MediaSource } from './resolve';
 const BUCKETS = [256, 512, 1024, 2048];
 const QUALITY = 0.82;
 /** Bumped when stored thumbnails change meaning, so older entries are ignored. */
-const VERSION = 2;
+const VERSION = 3;
 /** Thumbnails made at the same time (decode and encode run off the main thread). */
 const CONCURRENCY = 2;
 /** Object URLs kept alive; older ones are revoked unless a tile still shows them. */
@@ -63,7 +63,13 @@ export class Thumbnails {
 		private readonly app: App,
 		/** Keys a mounted tile still shows; their URLs are never revoked. */
 		private readonly inUse: () => ReadonlySet<string>,
+		/** The "HDR in tiles" setting. */
+		private readonly allowHdr: () => boolean = () => true,
 	) {}
+
+	private showHdr(): boolean {
+		return this.allowHdr() && hdrDisplay();
+	}
 
 	/** The key a tile shows for `media` at `needPx` (its longest side × pixel ratio). */
 	keyFor(media: MediaSource, natural: Size | undefined, needPx: number): string | null {
@@ -79,7 +85,7 @@ export class Thumbnails {
 		const bucket = bucketFor(media, natural, needPx);
 		if (bucket === null) return Promise.resolve(NONE);
 		const key = `${VERSION}|${media.src}|${bucket}`;
-		const hdr = this.hdr.get(media.src) === true && hdrDisplay();
+		const hdr = this.hdr.get(media.src) === true && this.showHdr();
 		const ready = this.urls.get(key);
 		if (ready || (hdr && media.kind === 'image')) {
 			if (ready) {
@@ -130,7 +136,7 @@ export class Thumbnails {
 	}
 
 	private result(key: string, media: MediaSource, blob: Blob | null, hdr: boolean): Thumb {
-		const showHdr = hdr && hdrDisplay();
+		const showHdr = hdr && this.showHdr();
 		// An HDR photo on an HDR display: the original, never an SDR copy.
 		if (showHdr && media.kind === 'image') return { url: null, hdr: true };
 		return { url: blob ? this.remember(key, blob) : null, hdr: showHdr };
@@ -186,9 +192,9 @@ export class Thumbnails {
 		const buffer = media.file
 			? await this.app.vault.readBinary(media.file)
 			: (await requestUrl({ url: media.src })).arrayBuffer;
+		// The SDR copy is made even for HDR photos, so turning the HDR setting
+		// off (or moving to an SDR display) has a thumbnail to show.
 		const hdr = isHdrHeader(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, HEADER_BYTES)));
-		// No point encoding an SDR copy nobody on this display will see.
-		if (hdr && hdrDisplay()) return { blob: null, hdr };
 		const source = new Blob([buffer]);
 		const landscape = !natural || natural.width >= natural.height;
 		const bitmap = await createImageBitmap(

@@ -1,4 +1,5 @@
 import { BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
+import type BasesGalleryPlugin from '../main';
 import { FillZoom } from '../zoom/fill';
 import { HoverPreview } from '../video/hover-preview';
 import type { Size } from '../media/dimensions';
@@ -115,7 +116,11 @@ export class GalleryView extends BasesView {
 	private needsLayout = false;
 	private unbindScroll: (() => void) | null = null;
 
-	constructor(controller: QueryController, scrollEl: HTMLElement) {
+	constructor(
+		controller: QueryController,
+		scrollEl: HTMLElement,
+		private readonly plugin: BasesGalleryPlugin,
+	) {
 		super(controller);
 		this.rootEl = scrollEl.createDiv('bases-gallery');
 		this.sizerEl = this.rootEl.createDiv('bases-gallery-sizer');
@@ -151,11 +156,16 @@ export class GalleryView extends BasesView {
 			}),
 		);
 
-		this.thumbnails = new Thumbnails(this.app, () => {
-			const keys = new Set<string>();
-			for (const tile of this.mounted.values()) if (tile.thumbKey) keys.add(tile.thumbKey);
-			return keys;
-		});
+		this.register(this.plugin.trackView(this));
+		this.thumbnails = new Thumbnails(
+			this.app,
+			() => {
+				const keys = new Set<string>();
+				for (const tile of this.mounted.values()) if (tile.thumbKey) keys.add(tile.thumbKey);
+				return keys;
+			},
+			() => this.plugin.settings.hdrTiles,
+		);
 		this.register(() => this.thumbnails?.dispose());
 		this.zoom = this.addChild(
 			new FillZoom(this.app, () => {
@@ -409,6 +419,16 @@ export class GalleryView extends BasesView {
 		}
 		const image = tile.image;
 		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null, item.media.src);
+	}
+
+	/** Re-shows every tile, for a changed plugin setting. */
+	settingsChanged(): void {
+		for (const tile of this.mounted.values()) {
+			tile.release();
+			this.pool.push(tile);
+		}
+		this.mounted.clear();
+		this.requestUpdate(false);
 	}
 
 	/** Starts a preview on the video tile under the pointer, stops it elsewhere. */

@@ -138,20 +138,32 @@
 	}
 }
 
-/* Video preview: shown over the poster once playing (Netflix: 300 ms, linear). */
-.bases-gallery-tile[data-kind="video"] {
-	--bases-gallery-preview-fade: 300ms;
+/*
+ * Video chrome. The duration badge and the mute button are one matched pair:
+ * same height, inset, fill and ring. They swap places when the preview
+ * starts: everything fades on the frame the video starts playing (Netflix:
+ * 300 ms, linear), and fades out faster when the pointer leaves.
+ */
+.bases-gallery {
+	--bases-gallery-chip-size: calc(var(--icon-s) + var(--size-4-3));
+	--bases-gallery-chip-inset: var(--size-4-2);
+	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
+	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
+	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, white 35%, transparent);
+	--bases-gallery-preview-fade-in: 300ms;
+	--bases-gallery-preview-fade-out: 200ms;
 }
 
 .bases-gallery-preview {
 	position: absolute;
 	inset: 0;
 	opacity: 0;
-	transition: opacity var(--bases-gallery-preview-fade, 300ms) linear;
+	transition: opacity var(--bases-gallery-preview-fade-out) linear;
 }
 
-.bases-gallery-preview.is-playing {
+.bases-gallery-tile.is-playing .bases-gallery-preview {
 	opacity: 1;
+	transition-duration: var(--bases-gallery-preview-fade-in);
 }
 
 .bases-gallery-preview-video {
@@ -161,41 +173,49 @@
 	object-fit: cover;
 }
 
-.bases-gallery-mute {
+/* Scoped to the tile so they outrank Obsidian's own button:not(.clickable-icon) rule. */
+.bases-gallery-tile .bases-gallery-mute,
+.bases-gallery-tile .bases-gallery-duration {
 	position: absolute;
-	right: var(--size-4-2);
-	bottom: var(--size-4-2);
-	/* Netflix's audio toggle: round, translucent dark fill, 50% white ring. */
-	padding: var(--size-4-2);
-	border: calc(var(--border-width) * 2) solid color-mix(in oklch, white 50%, transparent);
-	border-radius: 50%;
-	background: color-mix(in oklch, black 60%, transparent);
-	color: white;
-	--icon-size: var(--icon-m);
-	--icon-stroke: var(--icon-m-stroke-width);
-}
-
-.bases-gallery-mute:hover {
-	background: color-mix(in oklch, black 75%, transparent);
+	right: var(--bases-gallery-chip-inset);
+	bottom: var(--bases-gallery-chip-inset);
+	height: var(--bases-gallery-chip-size);
+	border-radius: calc(var(--bases-gallery-chip-size) / 2);
+	background: var(--bases-gallery-chip-fill);
+	box-shadow: var(--bases-gallery-chip-ring);
 	color: white;
 }
 
-/* Video length, bottom-right; the mute button takes its place while previewing. */
-.bases-gallery-duration {
-	position: absolute;
-	right: var(--size-4-2);
-	bottom: var(--size-4-2);
-	padding: var(--size-2-1) var(--size-4-1);
-	border-radius: var(--radius-s);
-	background: color-mix(in oklch, black 55%, transparent);
+.bases-gallery-tile .bases-gallery-mute {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--bases-gallery-chip-size);
+	padding: 0;
+	border: none;
+	cursor: pointer;
+	--icon-size: var(--icon-s);
+	--icon-stroke: var(--icon-s-stroke-width);
+}
+
+.bases-gallery-tile .bases-gallery-mute:hover {
+	background: var(--bases-gallery-chip-fill-hover);
+	box-shadow: var(--bases-gallery-chip-ring);
 	color: white;
+}
+
+.bases-gallery-tile .bases-gallery-duration {
+	display: flex;
+	align-items: center;
+	padding-inline: var(--size-4-2);
 	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-medium);
 	font-variant-numeric: tabular-nums;
-	line-height: 1.3;
 	pointer-events: none;
-	transition: opacity var(--bases-gallery-preview-fade, 300ms) linear;
+	transition: opacity var(--bases-gallery-preview-fade-out) linear;
 }
 
-.bases-gallery-tile.is-previewing .bases-gallery-duration {
+.bases-gallery-tile.is-playing .bases-gallery-duration {
 	opacity: 0;
+	transition-duration: var(--bases-gallery-preview-fade-in);
 }

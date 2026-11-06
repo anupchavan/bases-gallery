@@ -2,6 +2,8 @@ import { App, Component, setIcon, setTooltip } from 'obsidian';
 
 /** Pointer rest before a preview starts. */
 export const HOVER_DELAY_MS = 500;
+/** Must match --bases-gallery-preview-fade-out. */
+const FADE_OUT_MS = 200;
 const MUTED_KEY = 'bases-gallery-muted';
 
 /**
@@ -20,6 +22,8 @@ export class HoverPreview extends Component {
 	private hostEl: HTMLElement | null = null;
 	private timer = 0;
 	private pendingEl: HTMLElement | null = null;
+	private fadingEl: HTMLElement | null = null;
+	private releaseTimer = 0;
 	private muted: boolean;
 
 	constructor(private readonly app: App) {
@@ -32,14 +36,16 @@ export class HoverPreview extends Component {
 		});
 		this.videoEl.loop = true;
 		this.muteEl = this.layerEl.createEl('button', {
-			cls: 'bases-gallery-mute clickable-icon',
+			cls: 'bases-gallery-mute',
 			attr: { type: 'button' },
 		});
 		this.renderMute();
 	}
 
 	onload(): void {
-		this.registerDomEvent(this.videoEl, 'playing', () => this.layerEl.addClass('is-playing'));
+		// The tile's class drives every fade, so the poster, video, badge and
+		// mute button change together, on the frame the video starts.
+		this.registerDomEvent(this.videoEl, 'playing', () => this.hostEl?.addClass('is-playing'));
 		this.registerDomEvent(this.muteEl, 'click', (evt) => {
 			// The tile's own click would open the zoom.
 			evt.stopPropagation();
@@ -51,6 +57,7 @@ export class HoverPreview extends Component {
 
 	onunload(): void {
 		this.stop();
+		if (this.fadingEl) this.release(this.fadingEl);
 		this.layerEl.detach();
 	}
 
@@ -71,15 +78,27 @@ export class HoverPreview extends Component {
 		}, HOVER_DELAY_MS);
 	}
 
-	/** Pauses and frees the video, and hides the layer over the poster. */
+	/**
+	 * Fades the preview out, then pauses and frees the video. Hovering the
+	 * same tile again before the fade ends just fades it back in.
+	 */
 	stop(): void {
 		if (this.timer) window.clearTimeout(this.timer);
 		this.timer = 0;
 		this.pendingEl = null;
-		if (!this.hostEl) return;
-		this.hostEl.removeClass('is-previewing');
+		const host = this.hostEl;
+		if (!host) return;
 		this.hostEl = null;
-		this.layerEl.removeClass('is-playing');
+		host.removeClass('is-playing');
+		this.fadingEl = host;
+		this.releaseTimer = window.setTimeout(() => this.release(host), FADE_OUT_MS);
+	}
+
+	private release(host: HTMLElement): void {
+		this.releaseTimer = 0;
+		if (this.fadingEl !== host) return;
+		this.fadingEl = null;
+		host.removeClass('is-previewing');
 		this.layerEl.detach();
 		this.videoEl.pause();
 		this.videoEl.removeAttribute('src');
@@ -88,10 +107,20 @@ export class HoverPreview extends Component {
 
 	private start(tileEl: HTMLElement, src: string): void {
 		if (!tileEl.isConnected) return;
+		if (this.fadingEl === tileEl && this.videoEl.getAttribute('src') === src) {
+			// Came back during the fade-out: keep playing where it was.
+			window.clearTimeout(this.releaseTimer);
+			this.fadingEl = null;
+			this.hostEl = tileEl;
+			tileEl.addClass('is-playing');
+			return;
+		}
+		if (this.fadingEl) this.release(this.fadingEl);
 		this.hostEl = tileEl;
 		tileEl.addClass('is-previewing');
 		tileEl.appendChild(this.layerEl);
 		this.videoEl.muted = this.muted;
+		this.videoEl.currentTime = 0;
 		this.videoEl.src = src;
 		void this.videoEl.play().catch(() => this.stop());
 	}
