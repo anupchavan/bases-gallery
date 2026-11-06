@@ -10,8 +10,8 @@ import {
 	editorLivePreviewField,
 	getLinkpath,
 } from 'obsidian';
-import { resolveMediaText } from '../media/resolve';
-import { mediaKindOf } from '../media/kinds';
+import { MediaSource, resolveMediaText } from '../media/resolve';
+import { extensionOf } from '../media/kinds';
 import type { MediaNoteFilter } from './media-note-filter';
 
 /** Obsidian's internal embed factory: (context, file, subpath) → embed component. */
@@ -63,12 +63,19 @@ export class MediaNoteEmbeds extends Component {
 			.embedRegistry?.embedByExtension;
 		const original = registry?.md;
 		if (!registry || typeof original !== 'function') return false;
-		const mediaOfNote = (note: TFile): TFile | null => this.mediaOfNote(note);
+		const mediaOfNote = (note: TFile): MediaSource | null => this.mediaOfNote(note);
+		const fromWeb = (embed: unknown, note: TFile, src: string): unknown => this.loadFromWeb(embed, note, src);
 		// A function, not an arrow: Obsidian calls factories with its own `this`.
 		const routed: EmbedFactory = function (this: unknown, context, file, subpath) {
 			const media = file instanceof TFile ? mediaOfNote(file) : null;
-			const factory = media ? registry[media.extension.toLowerCase()] : undefined;
-			if (media && typeof factory === 'function') return factory.call(this, context, media, '');
+			if (media && file instanceof TFile) {
+				const extension = media.file ? media.file.extension : extensionOf(urlPath(media.src));
+				const factory = registry[extension.toLowerCase()];
+				if (typeof factory === 'function') {
+					if (media.file) return factory.call(this, context, media.file, '');
+					return fromWeb(factory.call(this, context, file, ''), file, media.src);
+				}
+			}
 			return original.call(this, context, file, subpath);
 		};
 		registry.md = routed;
@@ -78,20 +85,46 @@ export class MediaNoteEmbeds extends Component {
 		return true;
 	}
 
-	/** The media file a linked note stands for, or null when it isn't a media note. */
-	mediaOf(linktext: string, sourcePath: string): TFile | null {
+	/**
+	 * For a media note whose media is a web address: an image or video embed
+	 * built for the note, whose `loadFile` sees the web address as the note's
+	 * resource path, just while it reads it (synchronously, at its start).
+	 * The rest is Obsidian's own embed, controls included.
+	 */
+	private loadFromWeb(embed: unknown, note: TFile, src: string): unknown {
+		const loadable = embed as { loadFile?: (...args: unknown[]) => unknown } | null;
+		const load = loadable?.loadFile;
+		if (!loadable || typeof load !== 'function') return embed;
+		const { vault } = this.app;
+		loadable.loadFile = function (this: unknown, ...args: unknown[]): unknown {
+			// Whatever was there before (normally nothing: the method is on the prototype).
+			const before = Object.getOwnPropertyDescriptor(vault, 'getResourcePath');
+			const resolve = vault.getResourcePath.bind(vault);
+			vault.getResourcePath = (file: TFile): string => (file === note ? src : resolve(file));
+			try {
+				return load.apply(this, args);
+			} finally {
+				if (before) Object.defineProperty(vault, 'getResourcePath', before);
+				else delete (vault as { getResourcePath?: unknown }).getResourcePath;
+			}
+		};
+		return embed;
+	}
+
+	/** The media a linked note stands for, or null when it isn't a media note. */
+	mediaOf(linktext: string, sourcePath: string): MediaSource | null {
 		const note = this.app.metadataCache.getFirstLinkpathDest(getLinkpath(linktext), sourcePath);
 		return note ? this.mediaOfNote(note) : null;
 	}
 
-	/** The media file a note stands for, or null when it isn't a media note. */
-	mediaOfNote(note: TFile): TFile | null {
+	/** The media a note stands for (in the vault or on the web), or null when it isn't a media note. */
+	mediaOfNote(note: TFile): MediaSource | null {
 		const property = this.property();
 		if (!property || note.extension !== 'md') return null;
 		const value: unknown = this.app.metadataCache.getFileCache(note)?.frontmatter?.[property];
 		const raw = Array.isArray(value) ? (value as unknown[])[0] : value;
 		if (typeof raw !== 'string') return null;
-		const media = resolveMediaText(this.app, raw, note)?.file ?? null;
+		const media = resolveMediaText(this.app, raw, note);
 		return media && this.filter.matches(note) ? media : null;
 	}
 
@@ -106,7 +139,7 @@ export class MediaNoteEmbeds extends Component {
 		for (const embed of el.findAll('.internal-embed[src]')) {
 			const src = embed.getAttribute('src');
 			const media = src ? this.mediaOf(src, sourcePath) : null;
-			if (media) embed.setAttribute('src', media.path);
+			if (media?.file) embed.setAttribute('src', media.file.path);
 		}
 	}
 }
@@ -176,7 +209,11 @@ function livePreviewEmbeds(embeds: MediaNoteEmbeds): Extension {
 			if (touching(state, match)) continue;
 			const media = embeds.mediaOf(target, sourcePath);
 			if (!media) continue;
-			const markdown = alias ? `![[${media.path}|${alias}]]` : `![[${media.path}]]`;
+			const markdown = media.file
+				? alias
+					? `![[${media.file.path}|${alias}]]`
+					: `![[${media.file.path}]]`
+				: `![${alias ?? ''}](<${media.src}>)`;
 			const widget = new MediaEmbedWidget(embeds, markdown, sourcePath);
 			builder.add(from, to, Decoration.replace({ widget, block: true }));
 		}
@@ -215,11 +252,11 @@ function revealFiller(embeds: MediaNoteEmbeds): Extension {
 			for (const match of line.text.matchAll(EMBED)) {
 				const media = embeds.mediaOf(match[1]?.trim() ?? '', sourcePath);
 				// Obsidian reveals images only.
-				if (!media || mediaKindOf(media.extension) !== 'image') continue;
+				if (!media || media.kind !== 'image') continue;
 				const wrapper = tooltip.createDiv('image-embed').createDiv('image-wrapper');
 				wrapper.createEl('img', {
 					cls: 'media-manager-reveal-media',
-					attr: { src: embeds.app.vault.getResourcePath(media), alt: media.basename },
+					attr: { src: media.src, alt: match[1]?.trim() ?? '' },
 				});
 				return;
 			}
@@ -264,5 +301,14 @@ class MediaEmbedWidget extends WidgetType {
 
 	ignoreEvent(): boolean {
 		return false;
+	}
+}
+
+/** A web address's path, without its query or fragment ('' when it isn't one). */
+function urlPath(src: string): string {
+	try {
+		return new URL(src).pathname;
+	} catch {
+		return '';
 	}
 }
