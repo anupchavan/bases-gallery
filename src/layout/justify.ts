@@ -24,6 +24,8 @@ export interface JustifyOptions {
 	maxRowItems?: number;
 	/** No row may be taller than this, in px. */
 	maxHeight?: number;
+	/** Whether these are the gallery's last tiles: only then may the last row be short. */
+	final?: boolean;
 }
 
 export interface Box {
@@ -75,6 +77,7 @@ export function justify(
 	const crop = clamp(options.maxCropPerSide, 0, 0.25);
 	const tolerance = options.heightTolerance ?? 0.25;
 	const maxItems = Math.max(1, options.maxRowItems ?? 12);
+	const final = options.final ?? true;
 	// A tile may be shown between r * (1 - 2c) and r / (1 - 2c).
 	const minStretch = 1 - 2 * crop;
 	const maxStretch = 1 / minStretch;
@@ -135,7 +138,7 @@ export function justify(
 			sum += safeRatio(ratios[i]);
 			const prev = best[i] ?? Infinity;
 			if (prev === Infinity) continue;
-			const cost = prev + fit(sum, j - i, j === n).cost;
+			const cost = prev + fit(sum, j - i, j === n && final).cost;
 			if (cost < (best[j] ?? Infinity)) {
 				best[j] = cost;
 				from[j] = i;
@@ -154,7 +157,7 @@ export function justify(
 	for (const end of breaks) {
 		let sum = 0;
 		for (let i = start; i < end; i++) sum += safeRatio(ratios[i]);
-		const row = fit(sum, end - start, end === n);
+		const row = fit(sum, end - start, end === n && final);
 		let x = 0;
 		for (let i = start; i < end; i++) {
 			const isLastInRow = i === end - 1;

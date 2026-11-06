@@ -1,7 +1,6 @@
 import { BasesAllOptions, BasesPropertyId, BasesViewConfig } from 'obsidian';
 
-export const DEFAULT_TILE_SIZE = 300;
-export const DEFAULT_MAX_CROP = 10;
+export const DEFAULT_MIN_TILE_SIZE = 140;
 
 export type GalleryLayoutKind = 'mosaic' | 'rows';
 export type SizeSource = 'related' | 'property' | 'none';
@@ -11,10 +10,8 @@ export interface GalleryConfig {
 	mediaProperty: BasesPropertyId | null;
 	sizeBy: SizeSource;
 	sizeProperty: BasesPropertyId | null;
-	/** Mosaic: edge of a medium tile. Rows: row height. In px. */
-	tileSize: number;
-	/** Share of a tile that may be cropped on each side, 0 to 0.25. */
-	maxCropPerSide: number;
+	/** No tile is shorter than this, nor smaller in area than its square, in px. */
+	minTileSize: number;
 }
 
 export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
@@ -54,23 +51,12 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 		},
 		{
 			type: 'slider',
-			key: 'tileSize',
-			displayName: 'Tile size',
-			min: 80,
-			max: 600,
+			key: 'minTileSize',
+			displayName: 'Minimum tile size',
+			min: 60,
+			max: 400,
 			step: 10,
-			default: DEFAULT_TILE_SIZE,
-		},
-		{
-			type: 'slider',
-			key: 'maxCrop',
-			displayName: 'Maximum crop per side (%)',
-			// The mosaic keeps every photo's exact shape; only rows crop.
-			shouldHide: () => config.get('layout') !== 'rows',
-			min: 0,
-			max: 25,
-			step: 1,
-			default: DEFAULT_MAX_CROP,
+			default: DEFAULT_MIN_TILE_SIZE,
 		},
 	];
 }
@@ -81,8 +67,7 @@ export function readGalleryConfig(config: BasesViewConfig): GalleryConfig {
 		mediaProperty: config.getAsPropertyId('mediaProperty'),
 		sizeBy: readSizeSource(config.get('sizeBy')),
 		sizeProperty: config.getAsPropertyId('sizeProperty'),
-		tileSize: readNumber(config.get('tileSize'), DEFAULT_TILE_SIZE),
-		maxCropPerSide: readNumber(config.get('maxCrop'), DEFAULT_MAX_CROP) / 100,
+		minTileSize: readNumber(config.get('minTileSize'), DEFAULT_MIN_TILE_SIZE),
 	};
 }
 

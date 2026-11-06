@@ -21,9 +21,18 @@ const PROBE_CONCURRENCY = 6;
 /** On a first visit, wait this long for the first screenful of sizes before drawing. */
 const FIRST_PAINT_WAIT_MS = 250;
 const FIRST_PAINT_ITEMS = 40;
-/** Legibility floor for tiles inside blocks: px, and share of the tile size. */
-const MIN_TILE_PX = 88;
-const MIN_TILE_SHARE = 0.4;
+/** A medium mosaic tile's edge, and a Rows row's height, per px of minimum tile size. */
+const MEDIUM_TILE_PER_MIN = 2.2;
+const ROW_HEIGHT_PER_MIN = 1.6;
+/** Rows may crop up to this share per side to fill a row; the mosaic never crops. */
+const ROWS_MAX_CROP = 0.1;
+const MIN_TILE_PX = 60;
+/** Tiles laid out per page; the next page loads as the user nears the end. */
+const PAGE_SIZE = 120;
+/** How close to the end (in viewport heights) the next page starts loading. */
+const LOAD_AHEAD = 1.5;
+/** Longest wait for a page's sizes before laying it out with estimates. */
+const PAGE_WAIT_MS = 400;
 /** A layout slower than this waits for window resizes to settle. */
 const SLOW_LAYOUT_MS = 8;
 const RESIZE_SETTLE_MS = 150;
@@ -86,6 +95,11 @@ export class GalleryView extends BasesView {
 	private readyTimer = 0;
 
 	private lastLayoutMs = 0;
+	/** Items laid out so far (whole pages). */
+	private loaded = 0;
+	private loadingMore = false;
+	private pageTimer = 0;
+	private readonly loaderEl: HTMLElement;
 	private readonly settleResize = debounce(() => this.requestUpdate(true), RESIZE_SETTLE_MS, true);
 
 	private frame = 0;
@@ -96,6 +110,11 @@ export class GalleryView extends BasesView {
 		super(controller);
 		this.rootEl = scrollEl.createDiv('bases-gallery');
 		this.sizerEl = this.rootEl.createDiv('bases-gallery-sizer');
+		this.loaderEl = this.rootEl.createDiv({
+			cls: 'bases-gallery-loader',
+			attr: { role: 'status', 'aria-label': 'Loading more' },
+		});
+		this.loaderEl.hide();
 		this.emptyEl = this.rootEl.createDiv('bases-gallery-empty');
 		this.emptyEl.hide();
 	}
@@ -133,6 +152,7 @@ export class GalleryView extends BasesView {
 		this.unbindScroll = null;
 		if (this.frame) this.rootEl.win.cancelAnimationFrame(this.frame);
 		if (this.readyTimer) window.clearTimeout(this.readyTimer);
+		if (this.pageTimer) window.clearTimeout(this.pageTimer);
 		this.probeQueue = [];
 		this.flushSaves.run();
 		this.settleResize.cancel();
@@ -162,6 +182,7 @@ export class GalleryView extends BasesView {
 		}
 		this.settings = settings;
 		this.items = items;
+		this.loaded = Math.min(items.length, Math.max(PAGE_SIZE, this.loaded));
 		if (settings.sizeBy === 'related') this.applyRelatedWeights();
 		this.updateEmptyState(settings);
 		void this.ensureSizes();
@@ -219,9 +240,7 @@ export class GalleryView extends BasesView {
 		});
 		await this.cacheLoaded;
 
-		this.probeQueue = this.items.filter(
-			(item) => !this.ratios.has(item.media.src) && !this.probing.has(item.media.src),
-		);
+		this.queueProbes();
 		if (!this.ready && this.firstScreenKnown()) this.ready = true;
 		if (!this.ready && !this.readyTimer) {
 			this.readyTimer = window.setTimeout(() => {
@@ -233,6 +252,50 @@ export class GalleryView extends BasesView {
 		this.pumpProbes();
 		this.requestUpdate(true);
 	}
+
+	/** Reads sizes for laid-out tiles and the next page only, in display order. */
+	private queueProbes(): void {
+		const limit = Math.min(this.items.length, this.loaded + PAGE_SIZE);
+		this.probeQueue = this.items
+			.slice(0, limit)
+			.filter((item) => !this.ratios.has(item.media.src) && !this.probing.has(item.media.src));
+	}
+
+	private pageKnown(from: number, to: number): boolean {
+		for (let i = from; i < to; i++) {
+			const item = this.items[i];
+			if (item && !this.ratios.has(item.media.src)) return false;
+		}
+		return true;
+	}
+
+	/** Lays out the next page once its sizes are known (or the wait runs out). */
+	private loadMore(): void {
+		if (this.loadingMore || this.loaded >= this.items.length) return;
+		this.loadingMore = true;
+		const from = this.loaded;
+		const to = Math.min(this.items.length, from + PAGE_SIZE);
+		const finish = (): void => {
+			if (this.pageTimer) window.clearTimeout(this.pageTimer);
+			this.pageTimer = 0;
+			this.pendingPage = null;
+			this.loadingMore = false;
+			this.loaderEl.hide();
+			this.loaded = to;
+			this.queueProbes();
+			this.pumpProbes();
+			this.requestUpdate(true);
+		};
+		if (this.pageKnown(from, to)) {
+			finish();
+			return;
+		}
+		this.loaderEl.show();
+		this.pendingPage = { to, finish };
+		this.pageTimer = window.setTimeout(finish, PAGE_WAIT_MS);
+	}
+
+	private pendingPage: { to: number; finish: () => void } | null = null;
 
 	private firstScreenKnown(): boolean {
 		const first = this.items.slice(0, FIRST_PAINT_ITEMS);
@@ -253,9 +316,15 @@ export class GalleryView extends BasesView {
 					this.flushSaves();
 					this.onRatio(item.media.src, size.width / size.height);
 				}
+				const page = this.pendingPage;
+				if (page && this.pageKnown(this.loaded, page.to)) {
+					this.pendingPage = null;
+					page.finish();
+				}
 				if (!this.ready && this.firstScreenKnown()) {
 					this.ready = true;
 					if (this.readyTimer) window.clearTimeout(this.readyTimer);
+		if (this.pageTimer) window.clearTimeout(this.pageTimer);
 					this.readyTimer = 0;
 					this.requestUpdate(true);
 				}
@@ -302,31 +371,45 @@ export class GalleryView extends BasesView {
 		this.layoutPaneHeight = this.scrollers[0]?.clientHeight ?? 0;
 		this.gap = parseFloat(getComputedStyle(this.sizerEl).rowGap) || 0;
 		const fallback = this.typicalRatio();
-		const ratios = this.items.map(
-			(item) => this.ratios.get(item.media.src) ?? fallback,
-		);
-		const boxes =
-			settings.layout === 'rows'
-				? justify(ratios, {
-						width: this.layoutWidth,
-						targetHeight: settings.tileSize,
-						maxHeight: this.maxTileHeight(),
-						gap: this.gap,
-						maxCropPerSide: settings.maxCropPerSide,
-					}).boxes
-				: mosaic(
-						this.items.map((item, i) => ({
-							ratio: ratios[i] ?? fallback,
-							weight: item.weight,
-						})),
-						{
+		const loaded = Math.min(this.loaded, this.items.length);
+		const boxes: Box[] = [];
+		let y = 0;
+		// Pages are laid out one after another; a middle page ends flush, so
+		// pages join without a seam that looks different from any other.
+		for (let from = 0; from < loaded; from += PAGE_SIZE) {
+			const to = Math.min(loaded, from + PAGE_SIZE);
+			const page = this.items.slice(from, to);
+			const ratios = page.map((item) => this.ratios.get(item.media.src) ?? fallback);
+			const final = to >= this.items.length;
+			const pageBoxes =
+				settings.layout === 'rows'
+					? justify(ratios, {
 							width: this.layoutWidth,
-							tileSize: settings.tileSize,
-							minTileSize: Math.max(MIN_TILE_PX, settings.tileSize * MIN_TILE_SHARE),
-							maxTileHeight: this.maxTileHeight(),
+							targetHeight: settings.minTileSize * ROW_HEIGHT_PER_MIN,
+							maxHeight: this.maxTileHeight(),
 							gap: this.gap,
-						},
-					).boxes;
+							maxCropPerSide: ROWS_MAX_CROP,
+							final,
+						}).boxes
+					: mosaic(
+							page.map((item, i) => ({ ratio: ratios[i] ?? fallback, weight: item.weight })),
+							{
+								width: this.layoutWidth,
+								tileSize: settings.minTileSize * MEDIUM_TILE_PER_MIN,
+								minTileSize: settings.minTileSize,
+								maxTileHeight: this.maxTileHeight(),
+								gap: this.gap,
+								final,
+							},
+						).boxes;
+			let pageHeight = 0;
+			for (const box of pageBoxes) {
+				if (!box) continue;
+				boxes.push({ ...box, y: box.y + y });
+				pageHeight = Math.max(pageHeight, box.y + box.height);
+			}
+			y += pageHeight + this.gap;
+		}
 		this.layout = placed(boxes);
 		this.lastLayoutMs = performance.now() - started;
 		this.sizerEl.setCssProps({
@@ -342,6 +425,7 @@ export class GalleryView extends BasesView {
 
 		const view = this.visibleRange();
 		const span = view.bottom - view.top;
+		if (view.bottom + span * LOAD_AHEAD >= layout.height) this.loadMore();
 		const top = view.top - span * BUFFER_ABOVE;
 		const bottom = view.bottom + span * BUFFER_BELOW;
 

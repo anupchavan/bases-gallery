@@ -35,6 +35,11 @@ export interface MosaicOptions {
 	minTileSize?: number;
 	/** No band (so no tile) may be taller than this, in px: the visible pane's height. */
 	maxTileHeight?: number;
+	/**
+	 * Whether these are the gallery's last tiles. Only the last band of the
+	 * last page may be short and unfilled; a page in the middle ends flush.
+	 */
+	final?: boolean;
 }
 
 export interface MosaicLayout {
@@ -214,6 +219,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 	const gap = Math.max(0, options.gap);
 	const tile = Math.max(16, options.tileSize);
 	const minTile = Math.max(0, options.minTileSize ?? 0);
+	const final = options.final ?? true;
 	const minBand = tile * MIN_BAND;
 	const maxBand = Math.max(minBand, Math.min(tile * MAX_BAND, options.maxTileHeight ?? Infinity));
 
@@ -365,7 +371,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 		for (let len = 1; len < byLength.length; len++) {
 			const end = start + len;
 			for (const path of byLength[len]?.paths ?? []) {
-				const { cost } = bandFit(path, start, end === n);
+				const { cost } = bandFit(path, start, end === n && final);
 				if (cost >= INFEASIBLE) continue;
 				if (base + cost < (best[end] ?? Infinity)) {
 					best[end] = base + cost;
@@ -403,7 +409,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 	const boxes: Box[] = new Array<Box>(n);
 	let y = 0;
 	for (const { start, path, end } of bands) {
-		const fit = bandFit(path, start, end === n);
+		const fit = bandFit(path, start, end === n && final);
 		const natural = (width - gap * (path.columns - 1) + path.b) / path.a;
 		// The fallback (nothing else fit) keeps the full width so there are no
 		// holes, unless that would be taller than the pane allows.
