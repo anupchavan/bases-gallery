@@ -712,3 +712,8 @@ body {
 	flex-basis: 100%;
 	padding-top: var(--size-4-2);
 }
+
+/* A media note's photo in Obsidian's reveal tooltip, as wide as an embedded image (a line). */
+.cm-image-reveal-tooltip img.media-manager-reveal-media {
+	max-width: var(--file-line-width);
+}

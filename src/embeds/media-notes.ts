@@ -1,5 +1,5 @@
 import { EditorState, Extension, Prec, RangeSetBuilder, StateField, Transaction } from '@codemirror/state';
-import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
+import { Decoration, DecorationSet, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
 import {
 	App,
 	Component,
@@ -11,6 +11,7 @@ import {
 	getLinkpath,
 } from 'obsidian';
 import { resolveMediaText } from '../media/resolve';
+import { mediaKindOf } from '../media/kinds';
 import type { MediaNoteFilter } from './media-note-filter';
 
 /** Obsidian's internal embed factory: (context, file, subpath) → embed component. */
@@ -38,9 +39,7 @@ export class MediaNoteEmbeds extends Component {
 
 	onload(): void {
 		if (this.routeEmbeds()) {
-			// Obsidian keeps an image in view below its link while the link is
-			// edited, but only for image links; media notes get the same.
-			this.registerEditorExtension(livePreviewEmbeds(this, 'reveal'));
+			this.registerEditorExtension(revealFiller(this));
 			return;
 		}
 		// Fallback when Obsidian's embed factories aren't where we expect:
@@ -48,7 +47,7 @@ export class MediaNoteEmbeds extends Component {
 		this.registerPostProcessor((el, ctx) => this.retarget(el, ctx.sourcePath));
 		// Obsidian draws embeds as block widgets from a state field; ours is
 		// one too, ahead of it, so it is the one shown.
-		this.registerEditorExtension(Prec.highest(livePreviewEmbeds(this, 'replace')));
+		this.registerEditorExtension(Prec.highest(livePreviewEmbeds(this)));
 	}
 
 	/**
@@ -122,23 +121,15 @@ interface EmbedMatch {
 interface EmbedState {
 	/** Every embed in the note; found again only when the text changes. */
 	matches: EmbedMatch[];
-	/**
-	 * reveal mode: the embeds Obsidian shows as source now. Obsidian does
-	 * that after **Edit this block**, which selects the link text, and goes
-	 * back to the embed once the selection leaves the link.
-	 */
-	editing: Set<number>;
 	decorations: DecorationSet;
 }
 
 /**
- * Live Preview, for media notes:
- * - `replace` (fallback): the embed is drawn as the media file's own embed,
- *   except while the cursor is on it, when the link shows as text.
- * - `reveal`: Obsidian draws the embed itself; while the cursor is on the
- *   link, the media stays in view below it, as Obsidian does for images.
+ * Live Preview fallback, when Obsidian's embed factories aren't available:
+ * a media note's embed is drawn as the media file's own embed, except while
+ * the cursor is on it, when the link shows as text.
  */
-function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'): Extension {
+function livePreviewEmbeds(embeds: MediaNoteEmbeds): Extension {
 	/** Embeds in `from`–`to` of the document (whole lines). */
 	const scan = (state: EditorState, from: number, to: number): EmbedMatch[] => {
 		const matches: EmbedMatch[] = [];
@@ -175,62 +166,70 @@ function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'):
 	};
 	const touching = (state: EditorState, { from, to }: EmbedMatch): boolean =>
 		state.selection.ranges.some((range) => range.from <= to && range.to >= from);
-	/** Which embeds are being edited as source, carried from the last state. */
-	const editingNow = (state: EditorState, matches: EmbedMatch[], before: Set<number>): Set<number> => {
-		const editing = new Set<number>();
-		const main = state.selection.main;
-		for (const match of matches) {
-			// Edit this block selects the link text from just after ![[ (only
-			// the path when the link has a size or caption).
-			const selectsText = main.from === match.from + 3 && main.to > main.from && main.to <= match.to - 2;
-			if (selectsText || (before.has(match.from) && touching(state, match))) editing.add(match.from);
-		}
-		return editing;
-	};
-	const decorate = (state: EditorState, matches: EmbedMatch[], editingSet: Set<number>): DecorationSet => {
+	const decorate = (state: EditorState, matches: EmbedMatch[]): DecorationSet => {
 		const builder = new RangeSetBuilder<Decoration>();
 		if (!state.field(editorLivePreviewField)) return builder.finish();
 		const sourcePath = state.field(editorInfoField).file?.path ?? '';
-		let lastLine = -1;
 		for (const match of matches) {
 			const { from, to, target, alias } = match;
-			// replace: the cursor on the link shows it as text. reveal: the
-			// media shows below the link while Obsidian shows it as text.
-			const editing = mode === 'reveal' ? editingSet.has(from) : touching(state, match);
-			if (editing !== (mode === 'reveal')) continue;
+			// The cursor on the link shows it as text, to edit.
+			if (touching(state, match)) continue;
 			const media = embeds.mediaOf(target, sourcePath);
 			if (!media) continue;
 			const markdown = alias ? `![[${media.path}|${alias}]]` : `![[${media.path}]]`;
 			const widget = new MediaEmbedWidget(embeds, markdown, sourcePath);
-			if (mode === 'replace') {
-				builder.add(from, to, Decoration.replace({ widget, block: true }));
-				continue;
-			}
-			const line = state.doc.lineAt(to);
-			if (line.number === lastLine) continue;
-			lastLine = line.number;
-			builder.add(line.to, line.to, Decoration.widget({ widget, block: true, side: 1 }));
+			builder.add(from, to, Decoration.replace({ widget, block: true }));
 		}
 		return builder.finish();
 	};
 	return StateField.define<EmbedState>({
 		create: (state) => {
 			const matches = find(state);
-			const editing = new Set<number>();
-			return { matches, editing, decorations: decorate(state, matches, editing) };
+			return { matches, decorations: decorate(state, matches) };
 		},
 		update: (value, tr) => {
 			const modeChanged = tr.startState.field(editorLivePreviewField) !== tr.state.field(editorLivePreviewField);
 			if (!tr.docChanged && !tr.selection && !modeChanged) return value;
 			const matches = tr.docChanged ? refind(tr, value.matches) : value.matches;
-			// Positions move with typing; carry the edited embeds along.
-			const before = tr.docChanged
-				? new Set([...value.editing].map((pos) => tr.changes.mapPos(pos)))
-				: value.editing;
-			const editing = mode === 'reveal' ? editingNow(tr.state, matches, before) : before;
-			return { matches, editing, decorations: decorate(tr.state, matches, editing) };
+			return { matches, decorations: decorate(tr.state, matches) };
 		},
 		provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+	});
+}
+
+/**
+ * After **Edit this block**, Obsidian keeps an image in view below its link
+ * in a tooltip (`cm-image-reveal-tooltip`) over a gap it reserves. It builds
+ * that image from the link target, so for a media note the tooltip comes
+ * out empty. This fills it with the note's media, in the same structure
+ * Obsidian uses for images. Part of the agreed embed exception.
+ */
+function revealFiller(embeds: MediaNoteEmbeds): Extension {
+	return ViewPlugin.define((view) => {
+		const fill = (): void => {
+			const tooltip = view.dom.querySelector<HTMLElement>('.cm-image-reveal-tooltip');
+			if (!tooltip || tooltip.childElementCount > 0) return;
+			const { state } = view;
+			const line = state.doc.lineAt(state.selection.main.head);
+			const sourcePath = state.field(editorInfoField).file?.path ?? '';
+			for (const match of line.text.matchAll(EMBED)) {
+				const media = embeds.mediaOf(match[1]?.trim() ?? '', sourcePath);
+				// Obsidian reveals images only.
+				if (!media || mediaKindOf(media.extension) !== 'image') continue;
+				const wrapper = tooltip.createDiv('image-embed').createDiv('image-wrapper');
+				wrapper.createEl('img', {
+					cls: 'media-manager-reveal-media',
+					attr: { src: embeds.app.vault.getResourcePath(media), alt: media.basename },
+				});
+				return;
+			}
+		};
+		return {
+			update(): void {
+				// After Obsidian has drawn its tooltip for this update.
+				view.requestMeasure({ read: () => null, write: fill });
+			},
+		};
 	});
 }
 
