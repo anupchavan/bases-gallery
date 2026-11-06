@@ -8,8 +8,10 @@ import {
 	Value,
 	getLinkpath,
 } from 'obsidian';
+import { MediaKind, extensionOf, mediaKindOf, remoteKindOf } from './kinds';
 
-export type MediaKind = 'image' | 'video';
+export type { MediaKind } from './kinds';
+export { mediaKindOf } from './kinds';
 
 export interface MediaSource {
 	kind: MediaKind;
@@ -19,42 +21,8 @@ export interface MediaSource {
 	file: TFile | null;
 }
 
-const IMAGE_EXTENSIONS = new Set([
-	'png',
-	'jpg',
-	'jpeg',
-	'webp',
-	'avif',
-	'gif',
-	'bmp',
-	'svg',
-	'heic',
-	'heif',
-]);
-const VIDEO_EXTENSIONS = new Set([
-	'mp4',
-	'm4v',
-	'webm',
-	'mov',
-	'ogv',
-	'mkv',
-]);
-
-export function mediaKindOf(extension: string): MediaKind | null {
-	const ext = extension.toLowerCase();
-	if (IMAGE_EXTENSIONS.has(ext)) return 'image';
-	if (VIDEO_EXTENSIONS.has(ext)) return 'video';
-	return null;
-}
-
-function extensionOf(path: string): string {
-	const name = path.slice(path.lastIndexOf('/') + 1);
-	const dot = name.lastIndexOf('.');
-	return dot > 0 ? name.slice(dot + 1) : '';
-}
-
 /**
- * Finds the first image or video for an entry. With no property chosen, a
+ * Finds the first image, video or PDF for an entry. With no property chosen, a
  * media file listed by the base (for example through a `file.ext` filter)
  * is its own media.
  */
@@ -146,7 +114,8 @@ function fromText(
 			if (!Platform.isDesktopApp) return null;
 			const path = decodeURI(url.slice('file://'.length));
 			const kind = mediaKindOf(extensionOf(path));
-			if (!kind) return null;
+			// PDFs are read through the vault, so only vault PDFs are shown.
+			if (!kind || kind === 'pdf') return null;
 			return {
 				kind,
 				src: Platform.resourcePathPrefix + url.slice('file:///'.length),
@@ -159,8 +128,8 @@ function fromText(
 		} catch {
 			return null;
 		}
-		// A remote URL without a known extension is assumed to be an image.
-		const kind = mediaKindOf(extensionOf(pathname)) ?? 'image';
+		const kind = remoteKindOf(pathname);
+		if (!kind) return null;
 		return { kind, src: url, file: null };
 	}
 

@@ -364,6 +364,7 @@ export class GalleryView extends BasesView {
 					const hadDuration = this.sizes.get(item.media.src)?.duration !== undefined;
 					this.sizes.set(item.media.src, size);
 					if (!hadDuration && size.duration !== undefined) this.requestUpdate(false);
+					if (size.pages !== undefined) this.requestUpdate(false);
 					this.pendingSaves.push([item.media.src, size]);
 					this.flushSaves();
 					this.onRatio(item.media.src, size.width / size.height);
@@ -392,14 +393,14 @@ export class GalleryView extends BasesView {
 		}
 		this.emptyEl.setText(
 			settings.mediaProperty
-				? 'No images or videos found in this property.'
-				: 'Choose a media property in the view options, or filter this base to image and video files.',
+				? 'No images, videos or PDFs found in this property.'
+				: 'Choose a media property in the view options, or filter this base to image, video and PDF files.',
 		);
 		this.emptyEl.show();
 	}
 
 	/**
-	 * A click fills the window with the image or video. Cmd/Ctrl-click (or middle
+	 * A click fills the window with the image, video or PDF. Cmd/Ctrl-click (or middle
 	 * click) opens the note instead, like a link.
 	 */
 	private onTileClick(evt: MouseEvent): void {
@@ -423,7 +424,7 @@ export class GalleryView extends BasesView {
 		const el = tile.el;
 		this.zoom?.open(
 			el,
-			{ kind, src, width: size?.width ?? 0, height: size?.height ?? 0 },
+			{ kind, src, width: size?.width ?? 0, height: size?.height ?? 0, file: item.media.file, sourcePath: item.file.path },
 			{
 				shown: tile.image,
 				scroller: this.scrollers[0] ?? null,
@@ -601,6 +602,7 @@ export class GalleryView extends BasesView {
 			const thumbs = this.thumbnails;
 			const key = thumbs ? thumbs.keyFor(item.media, natural, needPx) : null;
 			tile.setDuration(item.media.kind === 'video' ? (natural?.duration ?? null) : null);
+			tile.setPages(item.media.kind === 'pdf' ? (natural?.pages ?? null) : null);
 			tile.show(item.media, key, () =>
 				thumbs ? thumbs.get(item.media, natural, needPx) : Promise.resolve({ url: null, hdr: false }),
 			);

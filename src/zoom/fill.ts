@@ -1,4 +1,5 @@
-import { App, Component, Scope, setIcon } from 'obsidian';
+import { App, Component, MarkdownRenderer, Scope, TFile, setIcon } from 'obsidian';
+import type { MediaKind } from '../media/kinds';
 import { MUTED_KEY, VideoControls } from '../video/player';
 
 /** medium-zoom's numbers, as measured on MUBI. */
@@ -17,12 +18,16 @@ const DARKEN_MS = 150;
 const PEEK_GRACE_MS = 200;
 
 export interface ZoomMedia {
-	kind: 'image' | 'video';
+	kind: MediaKind;
 	/** The original file. */
 	src: string;
 	/** Natural size, or 0 when not known yet. */
 	width: number;
 	height: number;
+	/** The vault file; a PDF is shown in Obsidian's own viewer from it. */
+	file?: TFile | null;
+	/** The note the media belongs to, for resolving the PDF embed. */
+	sourcePath?: string;
 }
 
 export interface ZoomOptions {
@@ -56,8 +61,9 @@ interface Rect {
  * page background fades in. The copy is a rounded box showing the media at
  * `object-fit: cover`, so as the box takes the media's own shape a cropped
  * tile opens onto the whole picture. Images never grow past their natural
- * size; videos fill the window and get playback controls. Closing runs the
- * same animation in reverse.
+ * size; videos fill the window and get playback controls. A PDF grows as
+ * its page 1 thumbnail, then shows in Obsidian's own PDF viewer. Closing
+ * runs the same animation in reverse.
  */
 export class FillZoom extends Component {
 	private overlayEl: HTMLElement | null = null;
@@ -65,6 +71,10 @@ export class FillZoom extends Component {
 	/** The rounded box that grows from the tile; holds the media and controls. */
 	private boxEl: HTMLElement | null = null;
 	private cloneEl: HTMLImageElement | HTMLVideoElement | null = null;
+	private kind: MediaKind = 'image';
+	/** Holds Obsidian's PDF viewer, once the box has arrived. */
+	private pdfEl: HTMLElement | null = null;
+	private frameHeight = 0;
 	private sourceEl: HTMLElement | null = null;
 	/** The tile's box, in window coordinates when the zoom opened. */
 	private base: Rect | null = null;
@@ -135,7 +145,13 @@ export class FillZoom extends Component {
 		const overlay = doc.body.createDiv('bases-gallery-zoom-overlay');
 		const stage = doc.body.createDiv('bases-gallery-zoom-stage');
 		const box = stage.createDiv('bases-gallery-zoom-box');
-		const clone = media.kind === 'video' ? this.videoClone(box, media, shown, video) : this.imageClone(box, media, shown);
+		const clone =
+			media.kind === 'video'
+				? this.videoClone(box, media, shown, video)
+				: media.kind === 'pdf'
+					? this.pdfClone(box, shown)
+					: this.imageClone(box, media, shown);
+		box.toggleClass('is-pdf', media.kind === 'pdf');
 		clone.addClass('bases-gallery-zoom-media');
 		box.setCssProps({
 			'--zoom-left': `${base.left}px`,
@@ -148,6 +164,7 @@ export class FillZoom extends Component {
 		this.stageEl = stage;
 		this.boxEl = box;
 		this.cloneEl = clone;
+		this.kind = media.kind;
 		this.sourceEl = tileEl;
 		this.base = base;
 		this.natural = natural;
@@ -187,9 +204,11 @@ export class FillZoom extends Component {
 		session.registerDomEvent(stage, 'click', (evt) => {
 			if (evt.target === stage) this.close();
 		});
-		// Controls show once the box has arrived.
+		// Controls (and the PDF viewer) show once the box has arrived.
 		const ready = (): void => {
-			if (this.stageEl === stage && !this.closing) stage.addClass('is-ready');
+			if (this.stageEl !== stage || this.closing) return;
+			stage.addClass('is-ready');
+			if (media.kind === 'pdf') this.showPdf(session, box, media);
 		};
 		session.registerDomEvent(box, 'transitionend', (evt) => {
 			if (evt.target === box && evt.propertyName === 'width') ready();
@@ -214,8 +233,9 @@ export class FillZoom extends Component {
 			// move the page just move the media with it.
 			let scrolled = 0;
 			const forward = (evt: WheelEvent): void => {
-				// The details panel scrolls itself.
-				if (this.isFullscreen() || this.detailsEl?.contains(evt.target as Node)) return;
+				// The details panel and the PDF viewer scroll themselves.
+				const target = evt.target as Node;
+				if (this.isFullscreen() || this.detailsEl?.contains(target) || this.pdfEl?.contains(target)) return;
 				evt.preventDefault();
 				scroller.scrollTop += evt.deltaY;
 				scrolled += Math.abs(evt.deltaY);
@@ -240,6 +260,8 @@ export class FillZoom extends Component {
 		this.closing = true;
 		if (this.isFullscreen()) void box.doc.exitFullscreen();
 		if (clone instanceof HTMLVideoElement) clone.pause();
+		// Shrinks back as the thumbnail; the viewer is unloaded once closed.
+		this.pdfEl?.removeClass('is-loaded');
 		this.stageEl?.removeClass('is-ready');
 		overlay.removeClass('is-open');
 		box.removeClass('is-open');
@@ -273,6 +295,34 @@ export class FillZoom extends Component {
 				.catch(() => {});
 		}
 		return clone;
+	}
+
+	/** Page 1's thumbnail, until Obsidian's viewer takes over. */
+	private pdfClone(box: HTMLElement, shown: HTMLImageElement | null): HTMLImageElement {
+		const clone = box.createEl('img', { attr: { alt: '', draggable: 'false' } });
+		if (shown) clone.src = shown.currentSrc || shown.src;
+		return clone;
+	}
+
+	/**
+	 * Renders the PDF as Markdown embeds it, so Obsidian draws its own PDF
+	 * viewer, sized to the box. The viewer belongs to the zoom's session and
+	 * is unloaded when the zoom closes.
+	 */
+	private showPdf(session: Component, box: HTMLElement, media: ZoomMedia): void {
+		const file = media.file;
+		if (!file || this.pdfEl) return;
+		const el = createDiv('bases-gallery-zoom-pdf');
+		// Under the info button.
+		box.insertBefore(el, this.infoEl);
+		this.pdfEl = el;
+		const height = Math.max(1, Math.floor(this.frameHeight));
+		const owner = session.addChild(new Component());
+		void MarkdownRenderer.render(this.app, `![[${file.path}#height=${height}]]`, el, media.sourcePath ?? '', owner)
+			.then(() => {
+				if (this.pdfEl === el && !this.closing) el.addClass('is-loaded');
+			})
+			.catch(() => {});
 	}
 
 	private videoClone(
@@ -317,7 +367,8 @@ export class FillZoom extends Component {
 		const ratio = natural.width / natural.height;
 		const startW = Math.max(base.width, base.height * ratio);
 		const startH = startW / ratio;
-		const upscale = this.cloneEl instanceof HTMLVideoElement;
+		// Videos and PDFs may grow past their natural size.
+		const upscale = this.kind !== 'image';
 		const capW = upscale ? roomW : Math.min(Math.max(startW, natural.width), roomW);
 		const capH = upscale ? roomH : Math.min(Math.max(startH, natural.height), roomH);
 		const scale = Math.min(capW / startW, capH / startH);
@@ -331,6 +382,7 @@ export class FillZoom extends Component {
 			'--frame-height': `${height}px`,
 			'--zoom-start-scale': `${startW / width}`,
 		});
+		this.frameHeight = height;
 		// Beside the media when the window has room on its right; otherwise
 		// over the media, under the info button.
 		this.detailsEl?.toggleClass('is-over', viewW - (viewW + width) / 2 < this.detailsRoom);
@@ -411,7 +463,10 @@ export class FillZoom extends Component {
 			// Following a link leaves the gallery, so close the zoom behind it.
 			if (evt.target instanceof Element && evt.target.closest('a')) this.close();
 		});
-		this.scope?.register([], 'i', () => {
+		this.scope?.register([], 'i', (evt) => {
+			// Typing in a field (the PDF viewer's search, say) is left alone.
+			const target = evt.target;
+			if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea'))) return true;
 			this.showDetails(!this.detailsOn);
 			return false;
 		});
@@ -474,6 +529,7 @@ export class FillZoom extends Component {
 		this.overlayEl = null;
 		this.stageEl = null;
 		this.cloneEl = null;
+		this.pdfEl = null;
 		this.boxEl = null;
 		this.infoEl = null;
 		this.detailsEl = null;

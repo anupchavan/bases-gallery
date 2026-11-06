@@ -24,6 +24,7 @@ export async function loadSizes(): Promise<Map<string, Size>> {
 			if (typeof cursor.key === 'string' && value?.width && value.height) {
 				const size: Size = { width: value.width, height: value.height };
 				if (typeof value.duration === 'number') size.duration = value.duration;
+				if (typeof value.pages === 'number') size.pages = value.pages;
 				out.set(cursor.key, size);
 			}
 			cursor.continue();

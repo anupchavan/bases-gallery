@@ -10,6 +10,8 @@ export interface Size {
 	height: number;
 	/** Videos only: length in seconds. */
 	duration?: number;
+	/** PDFs only: number of pages. */
+	pages?: number;
 }
 
 /** Bytes read from the start of a file. Headers sit well inside this. */

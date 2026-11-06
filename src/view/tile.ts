@@ -15,6 +15,9 @@ export class Tile {
 	private iconEl: HTMLElement | null = null;
 	private hdrPosterEl: HTMLVideoElement | null = null;
 	private durationEl: HTMLElement | null = null;
+	private pagesEl: HTMLElement | null = null;
+	private pagesTextEl: HTMLElement | null = null;
+	private iconKind = '';
 	private src = '';
 	/** Thumbnail key shown (or being fetched); null when showing the original. */
 	thumbKey: string | null = null;
@@ -52,16 +55,16 @@ export class Tile {
 			this.dropHdrPoster();
 		}
 		if (thumbKey === null) {
-			// An image shows its original; a video with no poster shows an icon.
+			// An image shows its original; a video or PDF with no thumbnail shows an icon.
 			if (media.kind === 'image') img.src = media.src;
-			else this.showVideoIcon();
+			else this.showIcon(media.kind);
 			return;
 		}
 		void thumbnail().then(({ url, hdr }) => {
 			if (this.src !== media.src || this.thumbKey !== thumbKey) return;
 			if (url) img.src = url;
 			else if (media.kind === 'image') img.src = media.src;
-			else if (!hdr) this.showVideoIcon();
+			else if (!hdr) this.showIcon(media.kind);
 			if (hdr && media.kind === 'video') this.showHdrPoster(media.src);
 		});
 	}
@@ -99,10 +102,11 @@ export class Tile {
 		video.detach();
 	}
 
-	private showVideoIcon(): void {
-		if (!this.iconEl) {
-			this.iconEl = createDiv('bases-gallery-tile-icon');
-			setIcon(this.iconEl, 'film');
+	private showIcon(kind: 'video' | 'pdf'): void {
+		this.iconEl ??= createDiv('bases-gallery-tile-icon');
+		if (this.iconKind !== kind) {
+			setIcon(this.iconEl, kind === 'pdf' ? 'file-text' : 'film');
+			this.iconKind = kind;
 		}
 		this.el.appendChild(this.iconEl);
 	}
@@ -119,6 +123,22 @@ export class Tile {
 		this.durationEl ??= createDiv('bases-gallery-duration');
 		this.durationEl.setText(formatDuration(seconds));
 		if (this.durationEl.parentElement !== this.el) this.el.appendChild(this.durationEl);
+	}
+
+	/** Marks a PDF tile with its page count, in the same chip as a video's length. */
+	setPages(pages: number | null): void {
+		if (pages === null || !(pages > 0)) {
+			this.pagesEl?.detach();
+			return;
+		}
+		if (!this.pagesEl || !this.pagesTextEl) {
+			this.pagesEl = createDiv('bases-gallery-duration bases-gallery-pages');
+			setIcon(this.pagesEl.createSpan('bases-gallery-pages-icon'), 'file-text');
+			this.pagesTextEl = this.pagesEl.createSpan();
+		}
+		this.pagesTextEl.setText(String(pages));
+		this.pagesEl.setAttr('aria-label', pages === 1 ? '1 page' : `${pages} pages`);
+		if (this.pagesEl.parentElement !== this.el) this.el.appendChild(this.pagesEl);
 	}
 
 	place(box: Box): void {
@@ -147,6 +167,7 @@ export class Tile {
 		this.thumbKey = null;
 		this.dropHdrPoster();
 		this.durationEl?.detach();
+		this.pagesEl?.detach();
 		this.imgEl?.removeAttribute('src');
 		this.el.detach();
 	}
