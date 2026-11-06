@@ -6,7 +6,7 @@ Requires Obsidian 1.13.0 or later, with **Bases** turned on in **Settings → Co
 
 ## Install
 
-Until the plugin is in the community store, install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat): add `anupchavan/bases-gallery` as a beta plugin, then enable **Media Manager** in **Settings → Community plugins**.
+Until the plugin is in the community store, install it with [BRAT](https://github.com/TfTHacker/obsidian42-brat): add `anupchavan/obsidian-media-manager` as a beta plugin, then enable **Media Manager** in **Settings → Community plugins**.
 
 ## Usage
 

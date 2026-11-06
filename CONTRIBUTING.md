@@ -5,8 +5,8 @@
 You need Node.js 22.13 or later in the 22 line, or Node.js 24 or later, and an Obsidian vault for testing.
 
 ```bash
-git clone https://github.com/anupchavan/bases-gallery.git
-cd media-manager
+git clone https://github.com/anupchavan/obsidian-media-manager.git
+cd obsidian-media-manager
 npm install
 npm run dev
 ```
