@@ -3,6 +3,7 @@ import type { Size } from '../media/dimensions';
 import { probeSize } from '../media/probe';
 import { loadSizes, saveSizes } from '../media/size-cache';
 import { Box, justify } from '../layout/justify';
+import { outerCorners } from '../layout/corners';
 import { mosaic } from '../layout/mosaic';
 import { MediaSource, resolveEntryMedia } from '../media/resolve';
 import { GalleryConfig, parseSize, readGalleryConfig } from './options';
@@ -37,6 +38,8 @@ interface PlacedLayout {
 	boxes: Box[];
 	/** Item indices sorted by top edge, for finding visible tiles. */
 	order: number[];
+	/** Per tile, which corners are on the gallery's outer outline. */
+	corners: Uint8Array;
 	/** Tallest tile, so a search can start early enough. */
 	maxHeight: number;
 	height: number;
@@ -261,7 +264,7 @@ export class GalleryView extends BasesView {
 							maxCropPerSide: settings.maxCropPerSide,
 						},
 					).boxes;
-		this.layout = placed(boxes);
+		this.layout = placed(boxes, this.gap);
 		this.lastLayoutMs = performance.now() - started;
 		this.sizerEl.setCssProps({
 			'--bases-gallery-height': `${this.layout.height}px`,
@@ -298,7 +301,7 @@ export class GalleryView extends BasesView {
 				tile = this.takeTile();
 				this.mounted.set(item.key, tile);
 			}
-			tile.place(box);
+			tile.place(box, layout.corners[i] ?? 0);
 			tile.show(item.media);
 		}
 
@@ -390,7 +393,7 @@ export class GalleryView extends BasesView {
 	}
 }
 
-function placed(boxes: Box[]): PlacedLayout {
+function placed(boxes: Box[], gap: number): PlacedLayout {
 	const order = boxes.map((_, i) => i);
 	order.sort((a, b) => (boxes[a]?.y ?? 0) - (boxes[b]?.y ?? 0));
 	let maxHeight = 0;
@@ -400,7 +403,7 @@ function placed(boxes: Box[]): PlacedLayout {
 		maxHeight = Math.max(maxHeight, box.height);
 		height = Math.max(height, box.y + box.height);
 	}
-	return { boxes, order, maxHeight, height };
+	return { boxes, order, corners: outerCorners(boxes, gap), maxHeight, height };
 }
 
 /** Position in `order` of the first tile whose top edge is at or below `y` (binary search). */

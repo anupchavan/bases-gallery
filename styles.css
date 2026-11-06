@@ -1,6 +1,8 @@
 .bases-gallery {
 	--bases-gallery-gap: var(--size-4-2);
-	--bases-gallery-radius: var(--radius-m);
+	/* Corners on the gallery's outer outline, and corners between tiles. */
+	--bases-gallery-radius-outer: var(--radius-l);
+	--bases-gallery-radius-inner: var(--radius-s);
 	--bases-gallery-fade-duration: 150ms;
 	/* Hairline edge drawn over the media: 10% at rest, 20% on hover. */
 	--bases-gallery-edge: inset 0 0 0 1px color-mix(in oklch, var(--mono-100) 20%, transparent);
@@ -26,9 +28,30 @@
 	height: var(--tile-height);
 	transform: translate(var(--tile-x), var(--tile-y));
 	overflow: hidden;
-	border-radius: var(--bases-gallery-radius);
+	--tile-radius-tl: var(--bases-gallery-radius-inner);
+	--tile-radius-tr: var(--bases-gallery-radius-inner);
+	--tile-radius-br: var(--bases-gallery-radius-inner);
+	--tile-radius-bl: var(--bases-gallery-radius-inner);
+
+	border-radius: var(--tile-radius-tl) var(--tile-radius-tr) var(--tile-radius-br) var(--tile-radius-bl);
 	background: var(--bases-cards-cover-background, var(--background-secondary));
 	contain: strict;
+}
+
+.bases-gallery-tile.is-outer-top-left {
+	--tile-radius-tl: var(--bases-gallery-radius-outer);
+}
+
+.bases-gallery-tile.is-outer-top-right {
+	--tile-radius-tr: var(--bases-gallery-radius-outer);
+}
+
+.bases-gallery-tile.is-outer-bottom-right {
+	--tile-radius-br: var(--bases-gallery-radius-outer);
+}
+
+.bases-gallery-tile.is-outer-bottom-left {
+	--tile-radius-bl: var(--bases-gallery-radius-outer);
 }
 
 /* The edge sits above the image (an inset shadow on the tile itself would be
