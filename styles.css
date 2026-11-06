@@ -4,11 +4,6 @@
 	--bases-gallery-radius-outer: var(--radius-l);
 	--bases-gallery-radius-inner: var(--radius-s);
 	--bases-gallery-fade-duration: 150ms;
-	/* Hairline edge drawn over the media: 10% at rest, 20% on hover. */
-	--bases-gallery-edge: inset 0 0 0 1px color-mix(in oklch, var(--mono-100) 20%, transparent);
-	--bases-gallery-edge-opacity: 0.5;
-	--bases-gallery-edge-opacity-hover: 1;
-	--bases-gallery-hover-duration: 150ms;
 
 	padding: var(--bases-cards-group-padding, var(--size-4-3));
 	background: var(--bases-cards-container-background, transparent);
@@ -52,23 +47,6 @@
 
 .bases-gallery-tile.is-outer-bottom-left {
 	--tile-radius-bl: var(--bases-gallery-radius-outer);
-}
-
-/* The edge sits above the image (an inset shadow on the tile itself would be
-   painted under it). Hover only changes opacity, which the compositor animates. */
-.bases-gallery-tile::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	border-radius: inherit;
-	box-shadow: var(--bases-gallery-edge);
-	opacity: var(--bases-gallery-edge-opacity);
-	pointer-events: none;
-	transition: opacity var(--bases-gallery-hover-duration) linear;
-}
-
-.bases-gallery-tile:hover::after {
-	opacity: var(--bases-gallery-edge-opacity-hover);
 }
 
 .bases-gallery-media {
