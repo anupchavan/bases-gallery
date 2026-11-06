@@ -22,7 +22,9 @@ export async function loadSizes(): Promise<Map<string, Size>> {
 			}
 			const value = cursor.value as Partial<Size> | undefined;
 			if (typeof cursor.key === 'string' && value?.width && value.height) {
-				out.set(cursor.key, { width: value.width, height: value.height });
+				const size: Size = { width: value.width, height: value.height };
+				if (typeof value.duration === 'number') size.duration = value.duration;
+				out.set(cursor.key, size);
 			}
 			cursor.continue();
 		};

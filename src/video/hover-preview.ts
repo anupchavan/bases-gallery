@@ -77,6 +77,7 @@ export class HoverPreview extends Component {
 		this.timer = 0;
 		this.pendingEl = null;
 		if (!this.hostEl) return;
+		this.hostEl.removeClass('is-previewing');
 		this.hostEl = null;
 		this.layerEl.removeClass('is-playing');
 		this.layerEl.detach();
@@ -88,6 +89,7 @@ export class HoverPreview extends Component {
 	private start(tileEl: HTMLElement, src: string): void {
 		if (!tileEl.isConnected) return;
 		this.hostEl = tileEl;
+		tileEl.addClass('is-previewing');
 		tileEl.appendChild(this.layerEl);
 		this.videoEl.muted = this.muted;
 		this.videoEl.src = src;

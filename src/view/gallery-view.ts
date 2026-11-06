@@ -290,7 +290,13 @@ export class GalleryView extends BasesView {
 		const limit = Math.min(this.items.length, this.loaded + PAGE_SIZE);
 		this.probeQueue = this.items
 			.slice(0, limit)
-			.filter((item) => !this.ratios.has(item.media.src) && !this.probing.has(item.media.src));
+			.filter(
+				(item) =>
+					!this.probing.has(item.media.src) &&
+					(!this.ratios.has(item.media.src) ||
+						// Videos cached before durations were recorded.
+						(item.media.kind === 'video' && this.sizes.get(item.media.src)?.duration === undefined)),
+			);
 	}
 
 	private pageKnown(from: number, to: number): boolean {
@@ -337,14 +343,16 @@ export class GalleryView extends BasesView {
 	private pumpProbes(): void {
 		while (this.activeProbes < PROBE_CONCURRENCY && this.probeQueue.length > 0) {
 			const item = this.probeQueue.shift();
-			if (!item || this.ratios.has(item.media.src) || this.probing.has(item.media.src)) continue;
+			if (!item || this.probing.has(item.media.src)) continue;
 			this.activeProbes++;
 			this.probing.add(item.media.src);
 			void probeSize(this.app, item.media).then((size) => {
 				this.activeProbes--;
 				this.probing.delete(item.media.src);
 				if (size) {
+					const hadDuration = this.sizes.get(item.media.src)?.duration !== undefined;
 					this.sizes.set(item.media.src, size);
+					if (!hadDuration && size.duration !== undefined) this.requestUpdate(false);
 					this.pendingSaves.push([item.media.src, size]);
 					this.flushSaves();
 					this.onRatio(item.media.src, size.width / size.height);
@@ -536,6 +544,7 @@ export class GalleryView extends BasesView {
 			const needPx = Math.max(box.width, box.height) * dpr;
 			const thumbs = this.thumbnails;
 			const key = thumbs ? thumbs.keyFor(item.media, natural, needPx) : null;
+			tile.setDuration(item.media.kind === 'video' ? (natural?.duration ?? null) : null);
 			tile.show(item.media, key, () =>
 				thumbs ? thumbs.get(item.media, natural, needPx) : Promise.resolve({ url: null, hdr: false }),
 			);

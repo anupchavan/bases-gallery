@@ -14,6 +14,7 @@ export class Tile {
 	private imgEl: HTMLImageElement | null = null;
 	private iconEl: HTMLElement | null = null;
 	private hdrPosterEl: HTMLVideoElement | null = null;
+	private durationEl: HTMLElement | null = null;
 	private src = '';
 	/** Thumbnail key shown (or being fetched); null when showing the original. */
 	thumbKey: string | null = null;
@@ -106,6 +107,20 @@ export class Tile {
 		this.el.appendChild(this.iconEl);
 	}
 
+	/**
+	 * Marks a video tile with its length (e.g. 0:12), the way photo apps mark
+	 * videos; a play icon would promise a click that the hover already does.
+	 */
+	setDuration(seconds: number | null): void {
+		if (seconds === null || !Number.isFinite(seconds)) {
+			this.durationEl?.detach();
+			return;
+		}
+		this.durationEl ??= createDiv('bases-gallery-duration');
+		this.durationEl.setText(formatDuration(seconds));
+		if (this.durationEl.parentElement !== this.el) this.el.appendChild(this.durationEl);
+	}
+
 	place(box: Box): void {
 		const prev = this.box;
 		if (
@@ -131,6 +146,7 @@ export class Tile {
 		this.src = '';
 		this.thumbKey = null;
 		this.dropHdrPoster();
+		this.durationEl?.detach();
 		this.imgEl?.removeAttribute('src');
 		this.el.detach();
 	}
@@ -162,4 +178,12 @@ export class Tile {
 		this.imgEl = img;
 		return img;
 	}
+}
+
+function formatDuration(total: number): string {
+	const seconds = Math.max(0, Math.round(total));
+	const h = Math.floor(seconds / 3600);
+	const m = Math.floor((seconds % 3600) / 60);
+	const s = String(seconds % 60).padStart(2, '0');
+	return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }

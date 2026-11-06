@@ -8,6 +8,8 @@
 export interface Size {
 	width: number;
 	height: number;
+	/** Videos only: length in seconds. */
+	duration?: number;
 }
 
 /** Bytes read from the start of a file. Headers sit well inside this. */

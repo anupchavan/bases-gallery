@@ -73,7 +73,15 @@ function videoSize(src: string): Promise<Size | null> {
 			resolve(size);
 		};
 		video.onloadedmetadata = () =>
-			done(video.videoWidth > 0 ? { width: video.videoWidth, height: video.videoHeight } : null);
+			done(
+				video.videoWidth > 0
+					? {
+							width: video.videoWidth,
+							height: video.videoHeight,
+							duration: Number.isFinite(video.duration) ? video.duration : undefined,
+						}
+					: null,
+			);
 		video.onerror = () => done(null);
 		video.src = src;
 	});

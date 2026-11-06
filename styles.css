@@ -179,3 +179,23 @@
 	background: color-mix(in oklch, black 75%, transparent);
 	color: white;
 }
+
+/* Video length, bottom-right; the mute button takes its place while previewing. */
+.bases-gallery-duration {
+	position: absolute;
+	right: var(--size-4-2);
+	bottom: var(--size-4-2);
+	padding: var(--size-2-1) var(--size-4-1);
+	border-radius: var(--radius-s);
+	background: color-mix(in oklch, black 55%, transparent);
+	color: white;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+	line-height: 1.3;
+	pointer-events: none;
+	transition: opacity var(--bases-gallery-preview-fade, 300ms) linear;
+}
+
+.bases-gallery-tile.is-previewing .bases-gallery-duration {
+	opacity: 0;
+}
