@@ -37,13 +37,18 @@ export class MediaNoteEmbeds extends Component {
 	}
 
 	onload(): void {
-		if (this.routeEmbeds()) return;
+		if (this.routeEmbeds()) {
+			// Obsidian keeps an image in view below its link while the link is
+			// edited, but only for image links; media notes get the same.
+			this.registerEditorExtension(livePreviewEmbeds(this, 'reveal'));
+			return;
+		}
 		// Fallback when Obsidian's embed factories aren't where we expect:
 		// draw the media ourselves (without Obsidian's image controls).
 		this.registerPostProcessor((el, ctx) => this.retarget(el, ctx.sourcePath));
 		// Obsidian draws embeds as block widgets from a state field; ours is
 		// one too, ahead of it, so it is the one shown.
-		this.registerEditorExtension(Prec.highest(livePreviewEmbeds(this)));
+		this.registerEditorExtension(Prec.highest(livePreviewEmbeds(this, 'replace')));
 	}
 
 	/**
@@ -117,15 +122,23 @@ interface EmbedMatch {
 interface EmbedState {
 	/** Every embed in the note; found again only when the text changes. */
 	matches: EmbedMatch[];
+	/**
+	 * reveal mode: the embeds Obsidian shows as source now. Obsidian does
+	 * that after **Edit this block**, which selects the link text, and goes
+	 * back to the embed once the selection leaves the link.
+	 */
+	editing: Set<number>;
 	decorations: DecorationSet;
 }
 
 /**
- * Live Preview: a media note's embed is drawn as the media file's own embed
- * (rendered by Obsidian through `MarkdownRenderer`), except while the cursor
- * is on it, when the link shows as text to edit, like any other embed.
+ * Live Preview, for media notes:
+ * - `replace` (fallback): the embed is drawn as the media file's own embed,
+ *   except while the cursor is on it, when the link shows as text.
+ * - `reveal`: Obsidian draws the embed itself; while the cursor is on the
+ *   link, the media stays in view below it, as Obsidian does for images.
  */
-function livePreviewEmbeds(embeds: MediaNoteEmbeds): Extension {
+function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'): Extension {
 	const find = (state: EditorState): EmbedMatch[] => {
 		const matches: EmbedMatch[] = [];
 		const text = state.doc.toString();
@@ -136,31 +149,61 @@ function livePreviewEmbeds(embeds: MediaNoteEmbeds): Extension {
 		}
 		return matches;
 	};
-	const decorate = (state: EditorState, matches: EmbedMatch[]): DecorationSet => {
+	const touching = (state: EditorState, { from, to }: EmbedMatch): boolean =>
+		state.selection.ranges.some((range) => range.from <= to && range.to >= from);
+	/** Which embeds are being edited as source, carried from the last state. */
+	const editingNow = (state: EditorState, matches: EmbedMatch[], before: Set<number>): Set<number> => {
+		const editing = new Set<number>();
+		const main = state.selection.main;
+		for (const match of matches) {
+			// The link text inside ![[ and ]], as Edit this block selects it.
+			const selectsText = main.from === match.from + 3 && main.to === match.to - 2;
+			if (selectsText || (before.has(match.from) && touching(state, match))) editing.add(match.from);
+		}
+		return editing;
+	};
+	const decorate = (state: EditorState, matches: EmbedMatch[], editingSet: Set<number>): DecorationSet => {
 		const builder = new RangeSetBuilder<Decoration>();
 		if (!state.field(editorLivePreviewField)) return builder.finish();
 		const sourcePath = state.field(editorInfoField).file?.path ?? '';
-		const { ranges } = state.selection;
-		for (const { from, to, target, alias } of matches) {
-			// The cursor on the link shows it as text, to edit.
-			if (ranges.some((range) => range.from <= to && range.to >= from)) continue;
+		let lastLine = -1;
+		for (const match of matches) {
+			const { from, to, target, alias } = match;
+			// replace: the cursor on the link shows it as text. reveal: the
+			// media shows below the link while Obsidian shows it as text.
+			const editing = mode === 'reveal' ? editingSet.has(from) : touching(state, match);
+			if (editing !== (mode === 'reveal')) continue;
 			const media = embeds.mediaOf(target, sourcePath);
 			if (!media) continue;
 			const markdown = alias ? `![[${media.path}|${alias}]]` : `![[${media.path}]]`;
-			builder.add(from, to, Decoration.replace({ widget: new MediaEmbedWidget(embeds, markdown, sourcePath), block: true }));
+			const widget = new MediaEmbedWidget(embeds, markdown, sourcePath);
+			if (mode === 'replace') {
+				builder.add(from, to, Decoration.replace({ widget, block: true }));
+				continue;
+			}
+			const line = state.doc.lineAt(to);
+			if (line.number === lastLine) continue;
+			lastLine = line.number;
+			builder.add(line.to, line.to, Decoration.widget({ widget, block: true, side: 1 }));
 		}
 		return builder.finish();
 	};
 	return StateField.define<EmbedState>({
 		create: (state) => {
 			const matches = find(state);
-			return { matches, decorations: decorate(state, matches) };
+			const editing = new Set<number>();
+			return { matches, editing, decorations: decorate(state, matches, editing) };
 		},
 		update: (value, tr) => {
 			const modeChanged = tr.startState.field(editorLivePreviewField) !== tr.state.field(editorLivePreviewField);
 			if (!tr.docChanged && !tr.selection && !modeChanged) return value;
 			const matches = tr.docChanged ? find(tr.state) : value.matches;
-			return { matches, decorations: decorate(tr.state, matches) };
+			// Positions move with typing; carry the edited embeds along.
+			const before = tr.docChanged
+				? new Set([...value.editing].map((pos) => tr.changes.mapPos(pos)))
+				: value.editing;
+			const editing = mode === 'reveal' ? editingNow(tr.state, matches, before) : before;
+			return { matches, editing, decorations: decorate(tr.state, matches, editing) };
 		},
 		provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 	});
