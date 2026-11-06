@@ -86,11 +86,11 @@
 	}
 }
 
-.bases-gallery-tile[data-kind="image"] {
+.bases-gallery-tile {
 	cursor: zoom-in;
 }
 
-.bases-gallery-media.is-zoom-source {
+.bases-gallery-tile.is-zoom-source {
 	visibility: hidden;
 }
 
@@ -113,29 +113,178 @@
 	opacity: 1;
 }
 
-.bases-gallery-zoom-image {
+/* Holds the clone and the video controls; the part that goes fullscreen. */
+.bases-gallery-zoom-stage {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-modal);
+	pointer-events: none;
+}
+
+.bases-gallery-zoom-stage:fullscreen {
+	background: var(--background-primary);
+	pointer-events: auto;
+	cursor: zoom-out;
+}
+
+.bases-gallery-zoom-box {
 	position: fixed;
 	top: var(--zoom-top);
 	left: var(--zoom-left);
 	width: var(--zoom-width);
 	height: var(--zoom-height);
-	z-index: var(--layer-modal);
-	object-fit: cover;
-	border-radius: calc(var(--bases-gallery-radius, var(--radius-s)) / var(--zoom-scale, 1));
+	overflow: hidden;
+	border-radius: var(--bases-gallery-radius, var(--radius-s));
+	pointer-events: auto;
 	cursor: zoom-out;
-	transition: transform 300ms cubic-bezier(0.2, 0, 0.2, 1);
+	/* Scrolling the pane underneath moves the box with the page. */
+	transform: translateY(var(--zoom-ride, 0));
+	transition-property: top, left, width, height;
+	transition-duration: 300ms;
+	transition-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-.bases-gallery-zoom-image.is-open {
-	transform: var(--zoom-transform);
+.bases-gallery-zoom-box.is-open {
+	top: var(--frame-top);
+	left: var(--frame-left);
+	width: var(--frame-width);
+	height: var(--frame-height);
+}
+
+.bases-gallery-zoom-media {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	display: block;
+	width: var(--frame-width);
+	height: var(--frame-height);
+	max-width: none;
+	object-fit: cover;
+	/* The media keeps its final size and is scaled down to cover the tile,
+	   so growing is a compositor transform, not a re-scale of the pixels.
+	   The box's width ratio changes linearly, so a linear scale tracks it. */
+	transform: translate(-50%, -50%) scale(var(--zoom-start-scale, 1));
+	transition: transform 300ms cubic-bezier(0.2, 0, 0.2, 1);
 	will-change: transform;
+}
+
+.bases-gallery-zoom-box.is-open .bases-gallery-zoom-media {
+	transform: translate(-50%, -50%) scale(1);
+}
+
+video.bases-gallery-zoom-media {
+	cursor: default;
+}
+
+.bases-gallery-zoom-stage.is-idle,
+.bases-gallery-zoom-stage.is-idle video.bases-gallery-zoom-media {
+	cursor: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
 	.bases-gallery-zoom-overlay,
-	.bases-gallery-zoom-image {
+	.bases-gallery-zoom-box,
+	.bases-gallery-zoom-media {
 		transition: none;
 	}
+}
+
+/*
+ * Player controls, inside the zoomed video's box: a scrim for
+ * contrast, then one row of play, time, scrub bar, mute and fullscreen.
+ * They fade in once the video has arrived and hide after two idle seconds
+ * while it plays.
+ */
+.bases-gallery-controls {
+	position: absolute;
+	inset: auto 0 0;
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-8) var(--size-4-3) var(--size-4-3);
+	background: linear-gradient(transparent, color-mix(in oklch, black 60%, transparent));
+	color: white;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+}
+
+.bases-gallery-zoom-stage.is-ready:not(.is-idle) .bases-gallery-controls {
+	opacity: 1;
+	pointer-events: auto;
+	transition-duration: var(--bases-gallery-preview-fade-in);
+}
+
+.bases-gallery-controls .bases-gallery-control {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: var(--bases-gallery-chip-size);
+	height: var(--bases-gallery-chip-size);
+	padding: 0;
+	border-radius: 50%;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	cursor: pointer;
+}
+
+.bases-gallery-controls .bases-gallery-control:hover {
+	background: var(--bases-gallery-chip-fill);
+	box-shadow: var(--bases-gallery-chip-ring);
+}
+
+.bases-gallery-control svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.bases-gallery-control-time {
+	flex: none;
+	font-size: var(--font-ui-smaller);
+	font-variant-numeric: tabular-nums;
+}
+
+.bases-gallery-control-track {
+	--bases-gallery-track-height: var(--size-2-2);
+
+	position: relative;
+	flex: 1;
+	height: var(--bases-gallery-chip-size);
+	cursor: pointer;
+	touch-action: none;
+}
+
+/* The rail, the buffered range and the played range: three stacked bars. */
+.bases-gallery-control-track::before,
+.bases-gallery-control-buffered,
+.bases-gallery-control-played {
+	position: absolute;
+	inset: 0;
+	height: var(--bases-gallery-track-height);
+	margin: auto 0;
+	border-radius: calc(var(--bases-gallery-track-height) / 2);
+	transform-origin: left;
+}
+
+.bases-gallery-control-track::before {
+	content: "";
+	background: color-mix(in oklch, white 25%, transparent);
+}
+
+.bases-gallery-control-buffered {
+	background: color-mix(in oklch, white 40%, transparent);
+	transform: scaleX(var(--progress, 0));
+}
+
+.bases-gallery-control-played {
+	background: var(--interactive-accent);
+	transform: scaleX(var(--progress, 0));
+}
+
+.bases-gallery-control-track:hover {
+	--bases-gallery-track-height: var(--size-2-3);
 }
 
 /*
@@ -144,7 +293,8 @@
  * starts: everything fades on the frame the video starts playing (Netflix:
  * 300 ms, linear), and fades out faster when the pointer leaves.
  */
-.bases-gallery {
+.bases-gallery,
+.bases-gallery-zoom-stage {
 	--bases-gallery-chip-size: calc(var(--icon-s) + var(--size-4-3));
 	--bases-gallery-chip-inset: var(--size-4-2);
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);

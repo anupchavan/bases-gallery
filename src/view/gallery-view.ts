@@ -398,7 +398,7 @@ export class GalleryView extends BasesView {
 	}
 
 	/**
-	 * A click fills the window with the image. Cmd/Ctrl-click (or middle
+	 * A click fills the window with the image or video. Cmd/Ctrl-click (or middle
 	 * click) opens the note instead, like a link.
 	 */
 	private onTileClick(evt: MouseEvent): void {
@@ -417,8 +417,14 @@ export class GalleryView extends BasesView {
 			void this.app.workspace.openLinkText(item.file.path, '', Keymap.isModEvent(evt));
 			return;
 		}
-		const image = tile.image;
-		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null, item.media.src);
+		const { kind, src } = item.media;
+		const size = this.sizes.get(src);
+		const video = kind === 'video' ? this.preview?.handOff(tile.el) : null;
+		this.zoom?.open(
+			tile.el,
+			{ kind, src, width: size?.width ?? 0, height: size?.height ?? 0 },
+			{ shown: tile.image, scroller: this.scrollers[0] ?? null, video },
+		);
 	}
 
 	/** Re-shows every tile, for a changed plugin setting. */
