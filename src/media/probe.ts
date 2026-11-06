@@ -23,14 +23,16 @@ export async function probeSize(app: App, media: MediaSource): Promise<Size | nu
 /** Gives up on slow remote media so the queue keeps moving. */
 const PROBE_TIMEOUT_MS = 10_000;
 
-function withTimeout(promise: Promise<Size | null>): Promise<Size | null> {
-	return new Promise((resolve) => {
-		const timer = window.setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
-		void promise.then((size) => {
-			window.clearTimeout(timer);
-			resolve(size);
-		});
+async function withTimeout(promise: Promise<Size | null>): Promise<Size | null> {
+	let timer = 0;
+	const timeout = new Promise<null>((resolve) => {
+		timer = window.setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
 	});
+	try {
+		return await Promise.race([promise, timeout]);
+	} finally {
+		window.clearTimeout(timer);
+	}
 }
 
 /**

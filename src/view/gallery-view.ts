@@ -151,7 +151,10 @@ export class GalleryView extends BasesView {
 			}),
 		);
 
-		this.register(this.plugin.trackView(this));
+		this.registerEvent(this.plugin.events.on('settings-changed', () => this.settingsChanged()));
+		this.register(() => {
+			if (this.plugin.stepper === this) this.plugin.stepper = null;
+		});
 		this.thumbnails = new Thumbnails(
 			this.app,
 			() => {
@@ -164,6 +167,7 @@ export class GalleryView extends BasesView {
 		this.register(() => this.thumbnails?.dispose());
 		this.zoom = this.addChild(
 			new FillZoom(this.app, () => {
+				if (this.plugin.stepper === this) this.plugin.stepper = null;
 				if (!this.zoomHeldUpdate) return;
 				this.zoomHeldUpdate = false;
 				this.requestUpdate(false);
@@ -275,14 +279,16 @@ export class GalleryView extends BasesView {
 		return changed;
 	}
 
+	private async loadCachedSizes(): Promise<void> {
+		for (const [src, size] of await loadSizes()) {
+			this.sizes.set(src, size);
+			if (!this.ratios.has(src)) this.ratios.set(src, size.width / size.height);
+		}
+	}
+
 	/** Loads cached sizes once, then reads the sizes still missing, in display order. */
 	private async ensureSizes(): Promise<void> {
-		this.cacheLoaded ??= loadSizes().then((cached) => {
-			for (const [src, size] of cached) {
-				this.sizes.set(src, size);
-				if (!this.ratios.has(src)) this.ratios.set(src, size.width / size.height);
-			}
-		});
+		this.cacheLoaded ??= this.loadCachedSizes();
 		await this.cacheLoaded;
 
 		this.queueProbes();
@@ -359,33 +365,36 @@ export class GalleryView extends BasesView {
 			if (!item || this.probing.has(item.media.src)) continue;
 			this.activeProbes++;
 			this.probing.add(item.media.src);
-			void probeSize(this.app, item.media).then((size) => {
-				this.activeProbes--;
-				this.probing.delete(item.media.src);
-				if (size) {
-					const hadDuration = this.sizes.get(item.media.src)?.duration !== undefined;
-					this.sizes.set(item.media.src, size);
-					if (!hadDuration && size.duration !== undefined) this.requestUpdate(false);
-					if (size.pages !== undefined) this.requestUpdate(false);
-					this.pendingSaves.push([item.media.src, size]);
-					this.flushSaves();
-					this.onRatio(item.media.src, size.width / size.height);
-				}
-				const page = this.pendingPage;
-				if (page && this.pageKnown(this.loaded, page.to)) {
-					this.pendingPage = null;
-					page.finish();
-				}
-				if (!this.ready && this.firstScreenKnown()) {
-					this.ready = true;
-					if (this.readyTimer) window.clearTimeout(this.readyTimer);
-		if (this.pageTimer) window.clearTimeout(this.pageTimer);
-					this.readyTimer = 0;
-					this.requestUpdate(true);
-				}
-				this.pumpProbes();
-			});
+			void this.probeOne(item);
 		}
+	}
+
+	/** Reads one item's size, then lays out whatever was waiting for it. */
+	private async probeOne(item: Item): Promise<void> {
+		const size = await probeSize(this.app, item.media);
+		this.activeProbes--;
+		this.probing.delete(item.media.src);
+		if (size) {
+			const hadDuration = this.sizes.get(item.media.src)?.duration !== undefined;
+			this.sizes.set(item.media.src, size);
+			if (!hadDuration && size.duration !== undefined) this.requestUpdate(false);
+			if (size.pages !== undefined) this.requestUpdate(false);
+			this.pendingSaves.push([item.media.src, size]);
+			this.flushSaves();
+			this.onRatio(item.media.src, size.width / size.height);
+		}
+		const page = this.pendingPage;
+		if (page && this.pageKnown(this.loaded, page.to)) {
+			this.pendingPage = null;
+			page.finish();
+		}
+		if (!this.ready && this.firstScreenKnown()) {
+			this.ready = true;
+			if (this.readyTimer) window.clearTimeout(this.readyTimer);
+			this.readyTimer = 0;
+			this.requestUpdate(true);
+		}
+		this.pumpProbes();
 	}
 
 	private updateEmptyState(settings: GalleryConfig): void {
@@ -429,6 +438,7 @@ export class GalleryView extends BasesView {
 		const item = this.items[tile.index];
 		if (!item) return;
 		this.zoomIndex = tile.index;
+		this.plugin.stepper = this;
 		const { kind, src } = item.media;
 		const size = this.sizes.get(src);
 		const el = tile.el;

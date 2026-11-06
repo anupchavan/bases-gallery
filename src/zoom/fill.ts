@@ -337,12 +337,7 @@ export class FillZoom extends Component {
 			const full = new Image();
 			full.decoding = 'async';
 			full.src = media.src;
-			void full
-				.decode()
-				.then(() => {
-					if (this.cloneEl === clone) clone.src = media.src;
-				})
-				.catch(() => {});
+			void this.swapWhenDecoded(full, clone, media.src);
 		}
 		return clone;
 	}
@@ -367,11 +362,26 @@ export class FillZoom extends Component {
 		this.pdfEl = el;
 		const height = Math.max(1, Math.floor(this.frameHeight));
 		const owner = session.addChild(new Component());
-		void MarkdownRenderer.render(this.app, `![[${file.path}#height=${height}]]`, el, media.sourcePath ?? '', owner)
-			.then(() => {
-				if (this.pdfEl === el && !this.closing) el.addClass('is-loaded');
-			})
-			.catch(() => {});
+		void this.renderPdf(`![[${file.path}#height=${height}]]`, el, media.sourcePath ?? '', owner);
+	}
+
+	private async renderPdf(markdown: string, el: HTMLElement, sourcePath: string, owner: Component): Promise<void> {
+		try {
+			await MarkdownRenderer.render(this.app, markdown, el, sourcePath, owner);
+			if (this.pdfEl === el && !this.closing) el.addClass('is-loaded');
+		} catch {
+			// Stays on the page 1 thumbnail.
+		}
+	}
+
+	/** Swaps the original in once decoded, if the zoom still shows it. */
+	private async swapWhenDecoded(full: HTMLImageElement, clone: HTMLImageElement, src: string): Promise<void> {
+		try {
+			await full.decode();
+			if (this.cloneEl === clone) clone.src = src;
+		} catch {
+			// Keeps the thumbnail.
+		}
 	}
 
 	private videoClone(

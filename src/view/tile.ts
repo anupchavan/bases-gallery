@@ -60,13 +60,22 @@ export class Tile {
 			else this.showIcon(media.kind);
 			return;
 		}
-		void thumbnail().then(({ url, hdr }) => {
-			if (this.src !== media.src || this.thumbKey !== thumbKey) return;
-			if (url) img.src = url;
-			else if (media.kind === 'image') img.src = media.src;
-			else if (!hdr) this.showIcon(media.kind);
-			if (hdr && media.kind === 'video') this.showHdrPoster(media.src);
-		});
+		void this.showThumbnail(media, thumbKey, thumbnail, img);
+	}
+
+	private async showThumbnail(
+		media: MediaSource,
+		thumbKey: string,
+		thumbnail: () => Promise<Thumb>,
+		img: HTMLImageElement,
+	): Promise<void> {
+		const { url, hdr } = await thumbnail();
+		// The tile may have moved on to other media meanwhile.
+		if (this.src !== media.src || this.thumbKey !== thumbKey) return;
+		if (url) img.src = url;
+		else if (media.kind === 'image') img.src = media.src;
+		else if (!hdr) this.showIcon(media.kind);
+		if (hdr && media.kind === 'video') this.showHdrPoster(media.src);
 	}
 
 	/**

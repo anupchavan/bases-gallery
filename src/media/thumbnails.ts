@@ -308,9 +308,7 @@ function posterFrame(src: string, bucket: number): Promise<{ blob: Blob | null; 
 			if (!context) return finish(null);
 			try {
 				context.drawImage(video, 0, 0, canvas.width, canvas.height);
-				void canvas
-					.convertToBlob({ type: 'image/webp', quality: QUALITY })
-					.then(finish, () => finish(null));
+				void encodeInto(canvas, finish);
 			} catch {
 				// A cross-origin frame without CORS taints the canvas.
 				finish(null);
@@ -333,5 +331,14 @@ function isHdrFrame(video: HTMLVideoElement): boolean {
 		return HDR_VIDEO_TRANSFERS.has(transfer);
 	} catch {
 		return false;
+	}
+}
+
+/** Encodes a canvas as WebP and hands the result (or null) to `done`. */
+async function encodeInto(canvas: OffscreenCanvas, done: (blob: Blob | null) => void): Promise<void> {
+	try {
+		done(await canvas.convertToBlob({ type: 'image/webp', quality: QUALITY }));
+	} catch {
+		done(null);
 	}
 }

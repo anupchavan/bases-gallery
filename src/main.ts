@@ -1,13 +1,22 @@
-import { Plugin } from 'obsidian';
+import { Events, Plugin } from 'obsidian';
 import { releasePdfWorker } from './media/pdf';
 import { DEFAULT_SETTINGS, GallerySettingTab, GallerySettings } from './settings';
 import { GALLERY_VIEW_TYPE, GalleryView } from './view/gallery-view';
+
+/** What the previous / next commands act on: the zoom that is open now. */
+export interface Stepper {
+	stepTarget(delta: number): number;
+	step(delta: number): void;
+}
 import { galleryViewOptions } from './view/options';
 import { NoteImageZoom } from './zoom/note-images';
 
 export default class MediaManagerPlugin extends Plugin {
 	settings: GallerySettings = { ...DEFAULT_SETTINGS };
-	private readonly views = new Set<GalleryView>();
+	/** Galleries listen here for setting changes (no view references kept). */
+	readonly events = new Events();
+	/** The gallery whose zoom is open, if any; it clears this when the zoom closes. */
+	stepper: Stepper | null = null;
 
 	onload(): void {
 		this.registerBasesView(GALLERY_VIEW_TYPE, {
@@ -41,24 +50,17 @@ export default class MediaManagerPlugin extends Plugin {
 		await this.loadSettings();
 	}
 
-	trackView(view: GalleryView): () => void {
-		this.views.add(view);
-		return () => this.views.delete(view);
-	}
-
 	/** Moves an open zoom to its previous or next item. */
 	private step(delta: number, checking: boolean): boolean {
-		for (const view of this.views) {
-			if (view.stepTarget(delta) < 0) continue;
-			if (!checking) view.step(delta);
-			return true;
-		}
-		return false;
+		const stepper = this.stepper;
+		if (!stepper || stepper.stepTarget(delta) < 0) return false;
+		if (!checking) stepper.step(delta);
+		return true;
 	}
 
 	/** Lets open galleries pick up a changed setting. */
 	settingsChanged(): void {
-		for (const view of this.views) view.settingsChanged();
+		this.events.trigger('settings-changed');
 	}
 
 	private async loadSettings(): Promise<void> {
