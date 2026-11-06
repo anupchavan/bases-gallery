@@ -136,17 +136,8 @@ export class GalleryView extends BasesView {
 	}
 
 	onload(): void {
-		const resizeObserver = new ResizeObserver(() => {
-			const paneHeight = this.scrollers[0]?.clientHeight ?? 0;
-			if (this.sizerEl.clientWidth === this.layoutWidth && paneHeight === this.layoutPaneHeight) return;
-			// Like Google Photos: when a full layout is expensive, wait for the
-			// resize to settle instead of relaying out every frame.
-			if (this.lastLayoutMs > SLOW_LAYOUT_MS) this.settleResize();
-			else this.requestUpdate(true);
-		});
-		resizeObserver.observe(this.sizerEl);
-		this.resizeObserver = resizeObserver;
-		this.register(() => resizeObserver.disconnect());
+		this.observeResize();
+		this.register(() => this.resizeObserver?.disconnect());
 
 		this.registerEvent(
 			this.app.workspace.on('css-change', () => this.requestUpdate(true)),
@@ -186,7 +177,14 @@ export class GalleryView extends BasesView {
 		});
 
 		this.bindScroll();
-		this.register(this.rootEl.onWindowMigrated(() => this.bindScroll()));
+		this.register(
+			this.rootEl.onWindowMigrated(() => {
+				// Moved to another window: watch sizes with that window's
+				// observer, so resizes there arrive on its own frames.
+				this.observeResize();
+				this.bindScroll();
+			}),
+		);
 		this.register(this.rootEl.onNodeInserted(() => this.bindScroll()));
 	}
 
@@ -464,6 +462,28 @@ export class GalleryView extends BasesView {
 		return null;
 	}
 
+	private observeResize(): void {
+		this.resizeObserver?.disconnect();
+		const win = this.rootEl.win as Window & typeof globalThis;
+		const observer = new win.ResizeObserver(() => {
+			const width = this.sizerEl.clientWidth;
+			// A hidden tab or collapsed pane has no width: lay out when it shows.
+			if (width === 0) return;
+			const paneHeight = this.scrollers[0]?.clientHeight ?? 0;
+			if (width === this.layoutWidth && paneHeight === this.layoutPaneHeight) {
+				// Back in view with the same size: catch up on anything held.
+				if (this.needsLayout) this.requestUpdate(true);
+				return;
+			}
+			// Like Google Photos: when a full layout is expensive, wait for the
+			// resize to settle instead of relaying out every frame.
+			if (this.lastLayoutMs > SLOW_LAYOUT_MS) this.settleResize();
+			else this.requestUpdate(true);
+		});
+		observer.observe(this.sizerEl);
+		this.resizeObserver = observer;
+	}
+
 	/** Coalesces all work into one animation frame. */
 	private requestUpdate(relayout: boolean): void {
 		if (relayout) this.needsLayout = true;
@@ -476,6 +496,8 @@ export class GalleryView extends BasesView {
 				this.zoomHeldUpdate = true;
 				return;
 			}
+			// Not shown (another tab is in front): keep the work for later.
+			if (this.sizerEl.clientWidth === 0) return;
 			if (this.needsLayout) {
 				this.needsLayout = false;
 				this.relayout();
@@ -492,7 +514,7 @@ export class GalleryView extends BasesView {
 
 		this.layoutWidth = this.sizerEl.clientWidth;
 		this.layoutPaneHeight = this.scrollers[0]?.clientHeight ?? 0;
-		this.gap = parseFloat(getComputedStyle(this.sizerEl).rowGap) || 0;
+		this.gap = parseFloat(this.sizerEl.win.getComputedStyle(this.sizerEl).rowGap) || 0;
 		const fallback = this.typicalRatio();
 		const loaded = Math.min(this.loaded, this.items.length);
 		const boxes: Box[] = [];

@@ -96,7 +96,7 @@ export class VideoControls extends Component {
 	onunload(): void {
 		this.alive = false;
 		window.clearTimeout(this.idleTimer);
-		window.cancelAnimationFrame(this.frame);
+		this.el.win.cancelAnimationFrame(this.frame);
 	}
 
 	/** Keyboard shortcuts while the zoom is open, as on most video sites. */
@@ -196,9 +196,9 @@ export class VideoControls extends Component {
 			this.frame = 0;
 			this.renderProgress();
 			const hidden = this.idleEl.hasClass('is-idle');
-			if (!this.video.paused && !hidden && this.alive) this.frame = window.requestAnimationFrame(tick);
+			if (!this.video.paused && !hidden && this.alive) this.frame = this.el.win.requestAnimationFrame(tick);
 		};
-		this.frame = window.requestAnimationFrame(tick);
+		this.frame = this.el.win.requestAnimationFrame(tick);
 	}
 
 	private render(): void {
