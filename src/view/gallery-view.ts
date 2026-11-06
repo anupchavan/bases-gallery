@@ -97,6 +97,7 @@ export class GalleryView extends BasesView {
 
 	private lastLayoutMs = 0;
 	private zoom: FillZoom | null = null;
+	private zoomHeldUpdate = false;
 	/** Items laid out so far (whole pages). */
 	private loaded = 0;
 	private loadingMore = false;
@@ -144,7 +145,13 @@ export class GalleryView extends BasesView {
 			}),
 		);
 
-		this.zoom = this.addChild(new FillZoom(this.app));
+		this.zoom = this.addChild(
+			new FillZoom(this.app, () => {
+				if (!this.zoomHeldUpdate) return;
+				this.zoomHeldUpdate = false;
+				this.requestUpdate(false);
+			}),
+		);
 		this.registerDomEvent(this.sizerEl, 'click', (evt) => this.onTileClick(evt));
 
 		this.bindScroll();
@@ -382,6 +389,11 @@ export class GalleryView extends BasesView {
 		if (this.frame) return;
 		this.frame = this.rootEl.win.requestAnimationFrame(() => {
 			this.frame = 0;
+			// Hold layout changes while an image is filled; they run on close.
+			if (this.zoom?.isOpen) {
+				this.zoomHeldUpdate = true;
+				return;
+			}
 			if (this.needsLayout) {
 				this.needsLayout = false;
 				this.relayout();

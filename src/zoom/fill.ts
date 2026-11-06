@@ -25,7 +25,11 @@ export class FillZoom extends Component {
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
 
-	constructor(private readonly app: App) {
+	constructor(
+		private readonly app: App,
+		/** Called after the zoom has fully closed. */
+		private readonly onClosed: () => void = () => {},
+	) {
 		super();
 	}
 
@@ -98,16 +102,20 @@ export class FillZoom extends Component {
 		// closes after 40 px, back onto the tile wherever it now is.
 		if (scroller) {
 			const startScroll = scroller.scrollTop;
+			// Only the user's own scrolling closes the zoom; layout updates that
+			// move the page just move the image with it.
+			let scrolled = 0;
 			const forward = (evt: WheelEvent): void => {
 				evt.preventDefault();
 				scroller.scrollTop += evt.deltaY;
+				scrolled += Math.abs(evt.deltaY);
+				this.onScrolled(scrolled);
 			};
 			session.registerDomEvent(overlay, 'wheel', forward, { passive: false });
 			session.registerDomEvent(clone, 'wheel', forward, { passive: false });
 			session.registerDomEvent(scroller, 'scroll', () => {
 				const moved = scroller.scrollTop - startScroll;
 				clone.setCssProps({ '--zoom-top': `${rect.top - moved}px` });
-				this.onScrolled(Math.abs(moved));
 			});
 		}
 
@@ -161,5 +169,6 @@ export class FillZoom extends Component {
 		this.closing = false;
 		if (this.session) this.removeChild(this.session);
 		this.session = null;
+		this.onClosed();
 	}
 }
