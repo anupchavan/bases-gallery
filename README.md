@@ -32,13 +32,13 @@ A list shows its first photo or video. With no media property chosen, a base tha
 - **Mosaic**: tiles of different sizes that interlock in rows and columns.
 - **Rows**: justified rows of equal height, like Google Photos, cropping each photo by at most 10% a side.
 
-**Tile size from** sets which tiles are larger:
+**Size by** sets which tiles are larger:
 
-- **How related the note is**: notes with more links, backlinks and shared tags get bigger tiles.
-- **A property**: the **Size property** you choose, with `small`, `large` or a number.
-- **Nothing**: every tile aims for the same size.
+- **Related notes**: notes with more links, backlinks and shared tags get bigger tiles.
+- **Property**: the **Size property** you choose, with `small`, `large` or a number.
+- **None**: every tile aims for the same size.
 
-**Minimum tile size** keeps the smallest tiles legible.
+**Smallest tile** keeps small tiles legible.
 
 ### Viewing
 
@@ -61,9 +61,13 @@ Video keys while zoomed:
 
 In a zoomed photo or video, Cmd-← and Cmd-→ (Ctrl on Windows and Linux) show the previous and next item; photos also take ← and →. To use other keys, bind **Media Manager: Show previous item** and **Show next item** in **Settings → Hotkeys**.
 
+### Images in notes
+
+Images in your notes open with the same zoom instead of Obsidian's image viewer. Turn this off in **Settings → Media Manager → Zoom images in notes**. Linked images and small images such as icons keep Obsidian's behaviour.
+
 ### Supported files
 
-Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). PDFs in your vault show their first page and open in Obsidian's own PDF viewer. HDR photos and videos are detected; **Settings → Media Manager → HDR in tiles** chooses whether tiles show them in HDR.
+Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). PDFs in your vault show their first page and open in Obsidian's own PDF viewer. HDR photos and videos are detected; **Settings → Media Manager → HDR tiles** chooses whether tiles show them in HDR.
 
 ## Performance and privacy
 

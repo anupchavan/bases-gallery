@@ -395,8 +395,8 @@ export class GalleryView extends BasesView {
 		}
 		this.emptyEl.setText(
 			settings.mediaProperty
-				? 'No images, videos or PDFs found in this property.'
-				: 'Choose a media property in the view options, or filter this base to image, video and PDF files.',
+				? 'No media in this property.'
+				: 'Pick a media property in the view options.',
 		);
 		this.emptyEl.show();
 	}

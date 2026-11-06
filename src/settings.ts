@@ -26,12 +26,12 @@ export class GallerySettingTab extends PluginSettingTab {
 		return [
 			{
 				name: 'HDR tiles',
-				desc: 'Show HDR photos and videos in HDR in the grid. Off saves memory. Opened photos and videos are always HDR.',
+				desc: 'Show HDR photos and videos in HDR in the grid. Off uses less memory.',
 				control: { type: 'toggle', key: 'hdrTiles' },
 			},
 			{
 				name: 'Zoom images in notes',
-				desc: 'Open images in notes with the gallery zoom instead of the built-in viewer.',
+				desc: "Open images in notes with the gallery zoom instead of Obsidian's viewer.",
 				control: { type: 'toggle', key: 'zoomNoteImages' },
 			},
 		];

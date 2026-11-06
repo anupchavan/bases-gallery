@@ -38,12 +38,12 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 		{
 			type: 'dropdown',
 			key: 'sizeBy',
-			displayName: 'Tile size from',
+			displayName: 'Size by',
 			default: 'related',
 			options: {
-				related: 'How related the note is',
-				property: 'A property',
-				none: 'Nothing (all equal)',
+				related: 'Related notes',
+				property: 'Property',
+				none: 'None',
 			},
 			shouldHide: () => config.get('layout') === 'rows',
 		},
@@ -57,7 +57,7 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 		{
 			type: 'slider',
 			key: 'minTileSize',
-			displayName: 'Minimum tile size',
+			displayName: 'Smallest tile',
 			min: 60,
 			max: 400,
 			step: 10,
