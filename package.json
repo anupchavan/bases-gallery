@@ -8,7 +8,10 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"lint": "eslint ."
+		"lint": "eslint . --max-warnings 0 && stylelint styles.css --max-warnings 0",
+		"lint:fix": "eslint . --fix",
+		"test": "node --test 'scripts/*.test.mjs'",
+		"sync:local": "node scripts/sync-local.mjs"
 	},
 	"keywords": [],
 	"license": "0-BSD",
@@ -21,6 +24,8 @@
 		"globals": "^17.14.0",
 		"jiti": "^2.7.0",
 		"obsidian": "^1.14.4",
+		"stylelint": "^18.0.0",
+		"stylelint-no-unsupported-browser-features": "^8.1.2",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.72.1"
 	}

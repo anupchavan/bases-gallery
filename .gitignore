@@ -1,5 +1,8 @@
 # vscode
-.vscode 
+.vscode
+
+# Cursor
+.cursor
 
 # Intellij
 *.iml
@@ -20,3 +23,10 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# Release staging
+/dist/
+
+# Local deployment paths and rollback copies
+.local-deploy.json
+.local-deploy-backups/

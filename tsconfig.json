@@ -13,7 +13,9 @@
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"allowSyntheticDefaultImports": true,
-		"lib": ["ES2021", "DOM"]
+		"lib": ["ES2021", "DOM"],
+		// No ambient @types/node: plugin code must run on mobile, where Node APIs do not exist.
+		"types": []
 	},
 	"include": ["src/**/*.ts"]
 }

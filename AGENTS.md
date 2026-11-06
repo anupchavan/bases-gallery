@@ -1,14 +1,16 @@
-# Obsidian community plugin
+# Bases Gallery
 
 ## Project overview
 
-- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript).
+- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript), plugin id `bases-gallery`.
+- Adds a **Gallery** layout to Bases through the public `registerBasesView` API (`src/main.ts`, `src/gallery-view.ts`). Requires Obsidian 1.13.0+ (`minAppVersion`).
+- Use only Obsidian's public, typed API from the `obsidian` package. No private or undocumented APIs, no monkey-patching of Obsidian internals, no casts to reach unexported members.
 - Entry point: `src/main.ts` compiled to `main.js` and loaded by Obsidian.
 - Required release artifacts: `main.js`, `manifest.json`, and optional `styles.css`.
 
 ## Environment & tooling
 
-- Node.js: use current LTS (Node 18+ recommended).
+- Node.js: 22.13+ in the 22 line, or 24+ (required by eslint 10 and stylelint 18). CI runs 22, 24 and 26.
 - **Package manager: npm** (required for this sample - `package.json` defines npm scripts and dependencies).
 - **Bundler: esbuild** (required for this sample - `esbuild.config.mjs` and build scripts depend on it). Alternative bundlers like Rollup or webpack are acceptable for other projects if they bundle all external dependencies into `main.js`.
 - Types: `obsidian` type definitions.
@@ -35,9 +37,10 @@ npm run build
 
 ## Linting
 
-- ESLint is preconfigured with `eslint-plugin-obsidianmd` for Obsidian-specific rules.
-- Run `npm run lint` to lint the project.
-- A GitHub Action automatically lints every commit on all branches.
+- ESLint is preconfigured with `eslint-plugin-obsidianmd` for Obsidian-specific rules. Stylelint (`stylelint.config.mjs`) mirrors the CSS checks in Obsidian's plugin review: no `!important`, and no features Obsidian's Chromium only partly supports.
+- `npm run lint` runs both with `--max-warnings 0`. `npm run lint:fix` applies ESLint fixes.
+- `tsconfig.json` sets `"types": []`, so `npm run build` fails if plugin code uses Node globals (they don't exist on mobile).
+- `.github/workflows/lint.yml` builds, lints and tests every push and pull request.
 
 ## File & folder conventions
 
@@ -79,11 +82,22 @@ npm run build
 
 ## Testing
 
-- Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` (if any) to:
+- `npm test` runs the Node test runner over `scripts/*.test.mjs` (currently the local deploy script).
+- Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` to:
     ```
-    <Vault>/.obsidian/plugins/<plugin-id>/
+    <Vault>/.obsidian/plugins/bases-gallery/
     ```
 - Reload Obsidian and enable the plugin in **Settings → Community plugins**.
+
+### Local development deployment
+
+After the first manual install, list the installed plugin folders in a gitignored `.local-deploy.json`:
+
+```json
+{ "targets": ["/path/to/Vault/.obsidian/plugins/bases-gallery"] }
+```
+
+Successful `npm run build` and `npm run dev` builds then copy JS, CSS and manifest to every target. Dev mode also rebuilds on `styles.css` and `manifest.json` changes. For a one-off copy without a build, run `npm run sync:local`. A target is refused unless its `manifest.json` id is `bases-gallery`. `data.json` and other vault files are never copied. Replaced files are backed up in `.local-deploy-backups/`. Check for the `[local deploy]` line before reporting an install; the sync installs files but does not reload the running app (use the Hot Reload plugin or reload Obsidian).
 
 ## Commands & settings
 
@@ -94,10 +108,12 @@ npm run build
 
 ## Versioning & releases
 
-- Bump `version` in `manifest.json` (SemVer) and update `versions.json` to map plugin version → minimum app version.
-- Create a GitHub release whose tag exactly matches `manifest.json`'s `version`. Do not use a leading `v`.
-- Attach `manifest.json`, `main.js`, and `styles.css` (if present) to the release as individual assets.
-- After the initial release, follow the process to add/update your plugin in the community catalog as required.
+- `npm version <x.y.z>` bumps `package.json`, then `version-bump.mjs` updates `manifest.json` and adds the version → `minAppVersion` entry to `versions.json`. Tags have no `v` prefix (`.npmrc`).
+- Write the release notes in `.github/release-notes/<x.y.z>.md` before releasing. The release workflow fails without them.
+- Release by pushing the tag, or by running **Release Obsidian plugin** from the Actions tab with the version (it tags the chosen branch itself).
+- `.github/workflows/release.yml` lints, tests and builds, checks that the tag, `manifest.json`, `package.json` and `versions.json` agree, attests build provenance, and creates a **draft** release with `main.js`, `manifest.json` and `styles.css`. Publish the draft by hand.
+- Betas: put the beta version in `manifest-beta.json` (same fields as `manifest.json`) and release that version. It ships as a pre-release installable with BRAT. Keep `manifest.json` on the stable version (undo the `npm version` change to it) so the community store keeps offering that.
+- After the initial release, follow the process to add/update the plugin in the community catalog.
 
 ## Security, privacy, and compliance
 
