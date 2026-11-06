@@ -1,4 +1,7 @@
-import { BasesView, QueryController } from 'obsidian';
+import { BasesView, QueryController, debounce } from 'obsidian';
+import type { Size } from '../media/dimensions';
+import { probeSize } from '../media/probe';
+import { loadSizes, saveSizes } from '../media/size-cache';
 import { Box, justify } from '../layout/justify';
 import { mosaic } from '../layout/mosaic';
 import { MediaSource, resolveEntryMedia } from '../media/resolve';
@@ -12,6 +15,13 @@ const FALLBACK_RATIO = 3 / 2;
 /** Rows kept mounted above and below the visible area, in viewport heights. */
 const BUFFER_ABOVE = 1;
 const BUFFER_BELOW = 2;
+/** Media sizes read at the same time. */
+const PROBE_CONCURRENCY = 6;
+/** On a first visit, wait this long for the first screenful of sizes before drawing. */
+const FIRST_PAINT_WAIT_MS = 250;
+const FIRST_PAINT_ITEMS = 40;
+/** Mosaic rows are taller than the tile size because they hold stacked pairs. */
+const MOSAIC_ROW_SCALE = 1.5;
 
 interface Item {
 	key: string;
@@ -49,6 +59,24 @@ export class GalleryView extends BasesView {
 	private readonly pool: Tile[] = [];
 	private scrollers: HTMLElement[] = [];
 
+	private cacheLoaded: Promise<void> | null = null;
+	private readonly probing = new Set<string>();
+	private probeQueue: Item[] = [];
+	private activeProbes = 0;
+	private pendingSaves: [string, Size][] = [];
+	private readonly flushSaves = debounce(
+		() => {
+			const entries = this.pendingSaves;
+			this.pendingSaves = [];
+			void saveSizes(entries);
+		},
+		1000,
+		false,
+	);
+	/** False until the first screenful of sizes is known (or the wait ran out). */
+	private ready = false;
+	private readyTimer = 0;
+
 	private frame = 0;
 	private needsLayout = false;
 	private unbindScroll: (() => void) | null = null;
@@ -83,6 +111,9 @@ export class GalleryView extends BasesView {
 		this.unbindScroll?.();
 		this.unbindScroll = null;
 		if (this.frame) this.rootEl.win.cancelAnimationFrame(this.frame);
+		if (this.readyTimer) window.clearTimeout(this.readyTimer);
+		this.probeQueue = [];
+		this.flushSaves.run();
 		for (const tile of this.mounted.values()) tile.release();
 		this.mounted.clear();
 		this.pool.length = 0;
@@ -104,7 +135,61 @@ export class GalleryView extends BasesView {
 		this.settings = settings;
 		this.items = items;
 		this.updateEmptyState(settings);
+		void this.ensureSizes();
+	}
+
+	/** Loads cached sizes once, then reads the sizes still missing, in display order. */
+	private async ensureSizes(): Promise<void> {
+		this.cacheLoaded ??= loadSizes().then((cached) => {
+			for (const [src, size] of cached) {
+				if (!this.ratios.has(src)) this.ratios.set(src, size.width / size.height);
+			}
+		});
+		await this.cacheLoaded;
+
+		this.probeQueue = this.items.filter(
+			(item) => !this.ratios.has(item.media.src) && !this.probing.has(item.media.src),
+		);
+		if (!this.ready && this.firstScreenKnown()) this.ready = true;
+		if (!this.ready && !this.readyTimer) {
+			this.readyTimer = window.setTimeout(() => {
+				this.readyTimer = 0;
+				this.ready = true;
+				this.requestUpdate(true);
+			}, FIRST_PAINT_WAIT_MS);
+		}
+		this.pumpProbes();
 		this.requestUpdate(true);
+	}
+
+	private firstScreenKnown(): boolean {
+		const first = this.items.slice(0, FIRST_PAINT_ITEMS);
+		return first.every((item) => this.ratios.has(item.media.src));
+	}
+
+	private pumpProbes(): void {
+		while (this.activeProbes < PROBE_CONCURRENCY && this.probeQueue.length > 0) {
+			const item = this.probeQueue.shift();
+			if (!item || this.ratios.has(item.media.src) || this.probing.has(item.media.src)) continue;
+			this.activeProbes++;
+			this.probing.add(item.media.src);
+			void probeSize(this.app, item.media).then((size) => {
+				this.activeProbes--;
+				this.probing.delete(item.media.src);
+				if (size) {
+					this.pendingSaves.push([item.media.src, size]);
+					this.flushSaves();
+					this.onRatio(item.media.src, size.width / size.height);
+				}
+				if (!this.ready && this.firstScreenKnown()) {
+					this.ready = true;
+					if (this.readyTimer) window.clearTimeout(this.readyTimer);
+					this.readyTimer = 0;
+					this.requestUpdate(true);
+				}
+				this.pumpProbes();
+			});
+		}
 	}
 
 	private updateEmptyState(settings: GalleryConfig): void {
@@ -123,6 +208,7 @@ export class GalleryView extends BasesView {
 	/** Coalesces all work into one animation frame. */
 	private requestUpdate(relayout: boolean): void {
 		if (relayout) this.needsLayout = true;
+		if (!this.ready) return;
 		if (this.frame) return;
 		this.frame = this.rootEl.win.requestAnimationFrame(() => {
 			this.frame = 0;
@@ -160,7 +246,7 @@ export class GalleryView extends BasesView {
 						})),
 						{
 							width: this.layoutWidth,
-							tileSize: settings.tileSize,
+							rowHeight: settings.tileSize * MOSAIC_ROW_SCALE,
 							gap: this.gap,
 							maxCropPerSide: settings.maxCropPerSide,
 						},

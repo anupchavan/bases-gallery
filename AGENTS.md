@@ -82,14 +82,18 @@ npm run build
 
 ## Testing
 
-- `npm test` runs the Node test runner over `scripts/*.test.mjs` (currently the local deploy script).
+- `npm test` runs the Node test runner over `scripts/*.test.mjs` and `test/*.test.mjs` (layouts, header parsing, local deploy).
 - Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` to:
     ```
     <Vault>/.obsidian/plugins/bases-gallery/
     ```
 - Reload Obsidian and enable the plugin in **Settings → Community plugins**.
 
-### Local development deployment
+### Development vault
+
+The repo lives inside its test vault, the same way as Custom Views: the vault is `~/Projects/bases-gallery` and this repo is its `.obsidian/plugins/bases-gallery` folder, so every build is already installed. The Hot Reload plugin in that vault reloads the plugin when `main.js` or `styles.css` changes. The vault's notes and media (Unsplash photos, Pexels videos) are outside this repo and not committed.
+
+### Local development deployment (other vaults)
 
 After the first manual install, list the installed plugin folders in a gitignored `.local-deploy.json`:
 

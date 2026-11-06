@@ -1,8 +1,13 @@
 /**
- * Mosaic: a grid of small square cells where each tile spans as many
- * columns and rows as fits its shape and size, packed densely like CSS
- * `grid-auto-flow: dense`. Fine cells mean a span can match almost any
- * aspect ratio, so the crop cap rarely has to give.
+ * Mosaic: full-width rows built from two kinds of block, a single tile or a
+ * stack of two tiles on top of each other. Every block in a row shares the
+ * row's height, so the mosaic has no holes and no ragged edges (except a
+ * short last row). Each tile keeps its own aspect ratio, within the crop cap,
+ * so stacked tiles come out smaller and single tiles larger: sizes vary
+ * across rows and columns without a fixed grid.
+ *
+ * Row breaks and which neighbours get stacked are chosen together by dynamic
+ * programming over a bounded window.
  */
 import type { Box } from './justify';
 
@@ -16,8 +21,8 @@ export interface MosaicItem {
 export interface MosaicOptions {
 	/** Inner width of the container in px. */
 	width: number;
-	/** Edge of a square medium tile, in px. */
-	tileSize: number;
+	/** Height a row aims for, in px. */
+	rowHeight: number;
 	/** Space between tiles, in px (both directions). */
 	gap: number;
 	/** Largest share of a tile's width or height cropped on each side, 0 to 0.25. */
@@ -27,164 +32,258 @@ export interface MosaicOptions {
 export interface MosaicLayout {
 	boxes: Box[];
 	height: number;
-	columns: number;
-	/** Grid cells left empty above the last occupied row. */
-	holes: number;
 }
 
-/** Cells per tile edge for a square medium tile. */
-const CELLS_PER_TILE = 2;
-const MAX_COLUMNS = 32;
-const MAX_SPAN = 6;
-/** Tile area in cells for each size class. */
-const AREA_BY_SIZE = [2, 4, 9];
-/**
- * How far above the lowest used row a tile may go to fill a gap. Older gaps
- * are left alone, which keeps placement fast and keeps tiles close to their
- * sort order.
- */
-const LOOKBACK_ROWS = 12;
-/** Alternative spans tried per tile when looking for the earliest gap. */
-const CANDIDATES = 8;
+/** Bounds on tiles per row; the real cap scales with how many fit across. */
+const MIN_ROW_ITEMS = 4;
+const MAX_ROW_ITEMS = 12;
+/** How far a row's height may move from the target, as a share of it. */
+const HEIGHT_TOLERANCE = 0.3;
+/** Paths kept per row end while searching block splits. */
+const MAX_PATHS = 16;
 
-interface Span {
-	cols: number;
-	rows: number;
-	cost: number;
+const INFEASIBLE = 1e6;
+
+/** A partial row: blocks chosen so far for tiles [start, end). */
+interface Path {
+	/** Bit k set when the block starting at tile start + k is a stack. */
+	stacks: number;
+	blocks: number;
+	/** Row width = height * sumA - sumB + gaps; see rowHeight(). */
+	sumA: number;
+	sumB: number;
+	/** Cost of block choices that doesn't depend on row height. */
+	choiceCost: number;
 }
 
 export function mosaic(
 	items: readonly MosaicItem[],
 	options: MosaicOptions,
 ): MosaicLayout {
-	const gap = Math.max(0, options.gap);
+	const n = items.length;
 	const width = Math.max(1, options.width);
-	const cellTarget = Math.max(16, (options.tileSize - gap) / CELLS_PER_TILE);
-	const columns = clamp(
-		Math.round((width + gap) / (cellTarget + gap)),
-		CELLS_PER_TILE,
-		MAX_COLUMNS,
-	);
-	const cell = (width - gap * (columns - 1)) / columns;
+	const target = Math.max(1, options.rowHeight);
+	const gap = Math.max(0, options.gap);
 	const crop = clamp(options.maxCropPerSide, 0, 0.25);
-	const full = columns === 32 ? 0xffffffff : (1 << columns) - 1;
+	const minStretch = 1 - 2 * crop;
+	const maxStretch = 1 / minStretch;
+	const minHeight = target * (1 - HEIGHT_TOLERANCE);
+	const maxHeight = target * (1 + HEIGHT_TOLERANCE);
+	// A row rarely holds more blocks than fit at a narrow 0.5 ratio, and a
+	// stack holds two tiles.
+	const maxRowItems = clamp(
+		Math.ceil((width / (target * 0.5)) * 1.5),
+		MIN_ROW_ITEMS,
+		MAX_ROW_ITEMS,
+	);
 
-	// One bitmask per grid row: bit c is set when column c is taken.
-	const taken: number[] = [];
-	const rowMask = (r: number): number => taken[r] ?? 0;
-	let firstOpen = 0;
+	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
+	const size = (i: number): number => clamp(Math.round(items[i]?.size ?? 1), 0, 2);
 
-	const memo = new Map<string, Span[]>();
-	const boxes: Box[] = new Array<Box>(items.length);
-	let usedRows = 0;
-
-	for (let i = 0; i < items.length; i++) {
-		const item = items[i];
-		const ratio = safeRatio(item?.ratio);
-		const area = AREA_BY_SIZE[clamp(Math.round(item?.size ?? 1), 0, 2)] ?? 4;
-		// Shapes repeat a lot (camera ratios), so spans are memoised per call.
-		const memoKey = `${Math.round(ratio * 1000)}:${area}`;
-		let spans = memo.get(memoKey);
-		if (!spans) {
-			spans = spansFor(ratio, area, columns, cell, gap, crop);
-			memo.set(memoKey, spans);
+	/** Cost of a finished row given its block sums, or INFEASIBLE. */
+	const rowCost = (path: Path, last: boolean): number => {
+		const free = width - gap * (path.blocks - 1);
+		// height * sumA - sumB = free
+		const natural = (free + path.sumB) / path.sumA;
+		let cost = path.choiceCost;
+		if (natural >= minHeight && natural <= maxHeight) {
+			return cost + deviation(natural, target);
 		}
-
-		// Of the best few spans, take the one that fits earliest (fills gaps),
-		// breaking ties by cost.
-		let best: { row: number; col: number; span: Span } | null = null;
-		for (const span of spans) {
-			const from = Math.max(firstOpen, usedRows - LOOKBACK_ROWS);
-			const spot = findSpot(span, columns, from, rowMask, best?.row);
-			if (!spot) continue;
-			if (!best || spot.row < best.row) best = { ...spot, span };
+		if (last && natural > maxHeight) {
+			// A short last row: left at the target height. Mildly penalised so
+			// earlier rows rebalance to give it company.
+			const used = target * path.sumA - path.sumB + gap * (path.blocks - 1);
+			const emptyShare = 1 - used / width;
+			return cost + 0.6 * emptyShare * emptyShare;
 		}
-		if (!best) continue;
-
-		const { row, col, span } = best;
-		const bits = (spanBits(span.cols) << col) >>> 0;
-		for (let r = row; r < row + span.rows; r++) {
-			taken[r] = (rowMask(r) | bits) >>> 0;
+		const height = natural > maxHeight ? maxHeight : minHeight;
+		const stretch = free / (height * path.sumA - path.sumB);
+		if (stretch >= minStretch && stretch <= maxStretch) {
+			cost += deviation(height, target) + 2 * (stretch - 1) ** 2;
+			return cost;
 		}
-		while (rowMask(firstOpen) === full) firstOpen++;
-		usedRows = Math.max(usedRows, row + span.rows);
-
-		boxes[i] = {
-			x: col * (cell + gap),
-			y: row * (cell + gap),
-			width: span.cols * cell + (span.cols - 1) * gap,
-			height: span.rows * cell + (span.rows - 1) * gap,
-		};
-	}
-
-	let holes = 0;
-	for (let r = 0; r < usedRows - 1; r++) holes += columns - popcount(rowMask(r));
-
-	return {
-		boxes,
-		height: usedRows > 0 ? usedRows * (cell + gap) - gap : 0,
-		columns,
-		holes,
+		return INFEASIBLE + cost + deviation(natural, target);
 	};
-}
 
-/** The cheapest spans for a tile, best first. Spans past the crop cap are used only if nothing else exists. */
-function spansFor(
-	ratio: number,
-	area: number,
-	columns: number,
-	cell: number,
-	gap: number,
-	crop: number,
-): Span[] {
-	const minShown = ratio * (1 - 2 * crop);
-	const maxShown = ratio / (1 - 2 * crop);
-	const within: Span[] = [];
-	const outside: Span[] = [];
-	const maxCols = Math.min(MAX_SPAN, columns);
-	for (let cols = 1; cols <= maxCols; cols++) {
-		for (let rows = 1; rows <= MAX_SPAN; rows++) {
-			const shown = (cols * cell + (cols - 1) * gap) / (rows * cell + (rows - 1) * gap);
-			const shapeError = Math.log(shown / ratio);
-			const areaError = Math.log((cols * rows) / area);
-			const cost = 4 * shapeError * shapeError + areaError * areaError;
-			const span = { cols, rows, cost };
-			if (shown >= minShown - 1e-9 && shown <= maxShown + 1e-9) within.push(span);
-			else outside.push(span);
-		}
-	}
-	const pool = within.length > 0 ? within : outside;
-	pool.sort((a, b) => a.cost - b.cost);
-	return pool.slice(0, CANDIDATES);
-}
+	const best = new Float64Array(n + 1).fill(Infinity);
+	const choice: (Path | null)[] = new Array<Path | null>(n + 1).fill(null);
+	const from = new Int32Array(n + 1);
+	best[0] = 0;
 
-function findSpot(
-	span: Span,
-	columns: number,
-	fromRow: number,
-	rowMask: (r: number) => number,
-	beforeRow: number | undefined,
-): { row: number; col: number } | null {
-	if (span.cols > columns) return null;
-	const bits = spanBits(span.cols);
-	for (let row = fromRow; beforeRow === undefined || row < beforeRow; row++) {
-		for (let col = 0; col + span.cols <= columns; col++) {
-			const mask = (bits << col) >>> 0;
-			let free = true;
-			for (let r = row; r < row + span.rows; r++) {
-				if ((rowMask(r) & mask) !== 0) {
-					free = false;
-					break;
+	for (let start = 0; start < n; start++) {
+		const base = best[start] ?? Infinity;
+		if (base === Infinity) continue;
+
+		// Grow rows from `start`, block by block. paths[k] = rows covering k tiles.
+		let frontier: Path[] = [
+			{ stacks: 0, blocks: 0, sumA: 0, sumB: 0, choiceCost: 0 },
+		];
+		const byLength: Path[][] = [];
+		byLength[0] = frontier;
+		for (let len = 0; len < maxRowItems && start + len < n; len++) {
+			frontier = byLength[len] ?? [];
+			if (frontier.length === 0) continue;
+			for (const path of frontier) {
+				// A row already wider than the container at its lowest allowed
+				// height (after the most cropping allowed) can only get worse.
+				const minWidth =
+					(path.sumA * minHeight - path.sumB + gap * (path.blocks - 1)) *
+					minStretch;
+				if (path.blocks > 0 && minWidth > width) continue;
+				const i = start + len;
+				// Single block.
+				extend(byLength, len + 1, {
+					stacks: path.stacks,
+					blocks: path.blocks + 1,
+					sumA: path.sumA + ratio(i),
+					sumB: path.sumB,
+					choiceCost: path.choiceCost + singleCost(size(i)),
+				});
+				// Stack of tiles i and i + 1.
+				if (len + 2 <= maxRowItems && i + 1 < n) {
+					const inv = 1 / ratio(i) + 1 / ratio(i + 1);
+					extend(byLength, len + 2, {
+						stacks: path.stacks | (1 << path.blocks),
+						blocks: path.blocks + 1,
+						sumA: path.sumA + 1 / inv,
+						sumB: path.sumB + gap / inv,
+						choiceCost:
+							path.choiceCost +
+							stackCost(size(i)) +
+							stackCost(size(i + 1)),
+					});
 				}
 			}
-			if (free) return { row, col };
+		}
+
+		for (let len = 1; len < byLength.length; len++) {
+			const end = start + len;
+			for (const path of byLength[len] ?? []) {
+				const cost = base + rowCost(path, end === n) + variety(path);
+				if (cost < (best[end] ?? Infinity)) {
+					best[end] = cost;
+					choice[end] = path;
+					from[end] = start;
+				}
+			}
 		}
 	}
-	return null;
+
+	// Walk back to collect rows, then place them top to bottom.
+	const rows: { start: number; end: number; path: Path }[] = [];
+	for (let end = n; end > 0; ) {
+		const path = choice[end];
+		const start = from[end] ?? 0;
+		if (!path) break;
+		rows.push({ start, end, path });
+		end = start;
+	}
+	rows.reverse();
+
+	const boxes: Box[] = new Array<Box>(n);
+	let y = 0;
+	for (const { start, end, path } of rows) {
+		const last = end === n;
+		const free = width - gap * (path.blocks - 1);
+		const natural = (free + path.sumB) / path.sumA;
+		let height = natural;
+		let stretch = 1;
+		let ragged = false;
+		if (natural < minHeight || natural > maxHeight) {
+			if (last && natural > maxHeight) {
+				height = target;
+				ragged = true;
+			} else {
+				const clamped = natural > maxHeight ? maxHeight : minHeight;
+				const s = free / (clamped * path.sumA - path.sumB);
+				if (s >= minStretch && s <= maxStretch) {
+					height = clamped;
+					stretch = s;
+				} else if (natural > maxHeight) {
+					// Too narrow even with cropping: keep shapes, leave it unfilled.
+					height = target;
+					ragged = true;
+				}
+			}
+		}
+
+		let x = 0;
+		let i = start;
+		for (let b = 0; b < path.blocks; b++) {
+			const isLastBlock = b === path.blocks - 1;
+			const stacked = (path.stacks & (1 << b)) !== 0;
+			let blockWidth: number;
+			if (stacked) {
+				const inv = 1 / ratio(i) + 1 / ratio(i + 1);
+				blockWidth = ((height - gap) / inv) * stretch;
+			} else {
+				blockWidth = height * ratio(i) * stretch;
+			}
+			if (isLastBlock && !ragged) blockWidth = Math.max(0, width - x);
+
+			if (stacked) {
+				// Split the height so both tiles keep their shapes at this width.
+				const h1 = ((height - gap) * (1 / ratio(i))) / (1 / ratio(i) + 1 / ratio(i + 1));
+				boxes[i] = { x, y, width: blockWidth, height: h1 };
+				boxes[i + 1] = {
+					x,
+					y: y + h1 + gap,
+					width: blockWidth,
+					height: height - h1 - gap,
+				};
+				i += 2;
+			} else {
+				boxes[i] = { x, y, width: blockWidth, height };
+				i += 1;
+			}
+			x += blockWidth + gap;
+		}
+		y += height + gap;
+	}
+
+	return { boxes, height: rows.length > 0 ? y - gap : 0 };
 }
 
-function spanBits(cols: number): number {
-	return cols >= 32 ? 0xffffffff : (1 << cols) - 1;
+/**
+ * Keeps at most MAX_PATHS paths per row length (a beam): when full, a new
+ * path replaces the most expensive one if it is cheaper.
+ */
+function extend(byLength: Path[][], len: number, path: Path): void {
+	const list = (byLength[len] ??= []);
+	if (list.length < MAX_PATHS) {
+		list.push(path);
+		return;
+	}
+	let worst = 0;
+	for (let k = 1; k < list.length; k++) {
+		if ((list[k]?.choiceCost ?? 0) > (list[worst]?.choiceCost ?? 0)) worst = k;
+	}
+	if (path.choiceCost < (list[worst]?.choiceCost ?? Infinity)) list[worst] = path;
+}
+
+/** Large tiles prefer standing alone; small ones prefer stacks. */
+function singleCost(size: number): number {
+	return size === 0 ? 0.06 : 0;
+}
+
+function stackCost(size: number): number {
+	if (size === 2) return 0.5;
+	if (size === 0) return 0;
+	return 0.03;
+}
+
+/** Nudges rows away from being plain rows or all stacks. */
+function variety(path: Path): number {
+	if (path.blocks <= 1) return 0;
+	const stacked = popcount(path.stacks);
+	if (stacked === 0) return 0.04;
+	if (stacked === path.blocks) return 0.04;
+	return 0;
+}
+
+function deviation(height: number, target: number): number {
+	const d = (height - target) / target;
+	return d * d;
 }
 
 function popcount(n: number): number {
