@@ -537,7 +537,7 @@ export class GalleryView extends BasesView {
 			const thumbs = this.thumbnails;
 			const key = thumbs ? thumbs.keyFor(item.media, natural, needPx) : null;
 			tile.show(item.media, key, () =>
-				thumbs ? thumbs.get(item.media, natural, needPx) : Promise.resolve(null),
+				thumbs ? thumbs.get(item.media, natural, needPx) : Promise.resolve({ url: null, hdr: false }),
 			);
 		}
 

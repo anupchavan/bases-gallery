@@ -1,6 +1,7 @@
 import { setIcon } from 'obsidian';
 import { Box } from '../layout/justify';
 import { MediaSource } from '../media/resolve';
+import type { Thumb } from '../media/thumbnails';
 
 /**
  * One reusable tile element. Tiles are pooled: scrolling moves a tile to a
@@ -12,6 +13,7 @@ export class Tile {
 	index = -1;
 	private imgEl: HTMLImageElement | null = null;
 	private iconEl: HTMLElement | null = null;
+	private hdrPosterEl: HTMLVideoElement | null = null;
 	private src = '';
 	/** Thumbnail key shown (or being fetched); null when showing the original. */
 	thumbKey: string | null = null;
@@ -32,7 +34,7 @@ export class Tile {
 	show(
 		media: MediaSource,
 		thumbKey: string | null,
-		thumbnail: () => Promise<string | null>,
+		thumbnail: () => Promise<Thumb>,
 	): void {
 		const changed = media.src !== this.src;
 		if (!changed && thumbKey === this.thumbKey) return;
@@ -46,6 +48,7 @@ export class Tile {
 			img.removeClass('is-loaded');
 			img.removeAttribute('src');
 			this.iconEl?.detach();
+			this.dropHdrPoster();
 		}
 		if (thumbKey === null) {
 			// An image shows its original; a video with no poster shows an icon.
@@ -53,12 +56,46 @@ export class Tile {
 			else this.showVideoIcon();
 			return;
 		}
-		void thumbnail().then((url) => {
+		void thumbnail().then(({ url, hdr }) => {
 			if (this.src !== media.src || this.thumbKey !== thumbKey) return;
 			if (url) img.src = url;
 			else if (media.kind === 'image') img.src = media.src;
-			else this.showVideoIcon();
+			else if (!hdr) this.showVideoIcon();
+			if (hdr && media.kind === 'video') this.showHdrPoster(media.src);
 		});
+	}
+
+	/**
+	 * An HDR video's poster: the video itself, paused on an early frame, so
+	 * the display shows it in HDR (a canvas-made image would be SDR). It
+	 * fades in over the SDR stand-in once the frame is ready, and is freed
+	 * when the tile moves on.
+	 */
+	private showHdrPoster(src: string): void {
+		if (this.hdrPosterEl?.getAttribute('src') === src) return;
+		const video =
+			this.hdrPosterEl ??
+			this.el.createEl('video', {
+				cls: 'bases-gallery-media bases-gallery-hdr-poster',
+				attr: { playsinline: '', preload: 'auto', 'aria-hidden': 'true' },
+			});
+		video.muted = true;
+		this.hdrPosterEl = video;
+		if (!video.parentElement) this.el.appendChild(video);
+		video.removeClass('is-loaded');
+		video.onloadedmetadata = () => {
+			video.currentTime = Math.min(0.5, (video.duration || 1) / 3);
+		};
+		video.onseeked = () => video.addClass('is-loaded');
+		video.src = src;
+	}
+
+	private dropHdrPoster(): void {
+		const video = this.hdrPosterEl;
+		if (!video) return;
+		video.removeAttribute('src');
+		video.load();
+		video.detach();
 	}
 
 	private showVideoIcon(): void {
@@ -93,6 +130,7 @@ export class Tile {
 	release(): void {
 		this.src = '';
 		this.thumbKey = null;
+		this.dropHdrPoster();
 		this.imgEl?.removeAttribute('src');
 		this.el.detach();
 	}

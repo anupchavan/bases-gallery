@@ -18,3 +18,20 @@ test('applies EXIF rotation', () => {
 test('returns null for unknown data', () => {
 	assert.equal(sizeFromHeader(new Uint8Array(64)), null);
 });
+
+import { isHdrHeader } from '../src/media/dimensions.ts';
+
+test('HDR: PQ AVIF yes, ordinary images no', () => {
+	assert.equal(isHdrHeader(read('hdr-pq.avif')), true);
+	for (const name of ['a.png', 'a.jpg', 'a.avif', 'a.heic', 'lossy.webp']) assert.equal(isHdrHeader(read(name)), false, name);
+});
+
+test('HDR: gain map marker and PNG cICP', () => {
+	const xmp = new TextEncoder().encode('\xff\xd8 <x:xmpmeta hdrgm:Version="1.0"> ');
+	assert.equal(isHdrHeader(xmp), true);
+	const png = new Uint8Array(64);
+	png.set([0x89, 0x50, 0x4e, 0x47]);
+	png.set(new TextEncoder().encode('cICP'), 20);
+	png.set([9, 16, 0, 1], 24);
+	assert.equal(isHdrHeader(png), true);
+});

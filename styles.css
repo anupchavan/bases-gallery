@@ -39,6 +39,12 @@
 	opacity: 1;
 }
 
+/* Sits over the SDR stand-in poster and fades in once its frame is ready. */
+.bases-gallery-hdr-poster {
+	position: absolute;
+	inset: 0;
+}
+
 .bases-gallery-tile-icon {
 	display: flex;
 	align-items: center;

@@ -1,11 +1,13 @@
 import { App, requestUrl } from 'obsidian';
 import { THUMBS, openDatabase, settle } from './db';
-import type { Size } from './dimensions';
+import { HEADER_BYTES, type Size, isHdrHeader } from './dimensions';
 import { MediaSource } from './resolve';
 
 /** Longest side of a stored thumbnail, in px. A tile uses the smallest that covers it. */
 const BUCKETS = [256, 512, 1024, 2048];
 const QUALITY = 0.82;
+/** Bumped when stored thumbnails change meaning, so older entries are ignored. */
+const VERSION = 2;
 /** Thumbnails made at the same time (decode and encode run off the main thread). */
 const CONCURRENCY = 2;
 /** Object URLs kept alive; older ones are revoked unless a tile still shows them. */
@@ -16,9 +18,29 @@ const MAX_BYTES = 300 * 1024 * 1024;
 const SKIP = /\.(gif|svg)(\?|$)/i;
 
 interface Stored {
-	blob: Blob;
+	/** Missing for an HDR image: it is always shown from its original. */
+	blob?: Blob;
 	bytes: number;
 	at: number;
+	hdr?: boolean;
+}
+
+export interface Thumb {
+	/** Thumbnail URL; null means show the original. */
+	url: string | null;
+	/**
+	 * The media is HDR and this display can show HDR. Canvas-made WebP is
+	 * SDR, so an HDR photo is shown from its original and an HDR video from
+	 * a paused frame of the video itself (url is then an SDR stand-in).
+	 */
+	hdr: boolean;
+}
+
+const NONE: Thumb = { url: null, hdr: false };
+
+/** Whether this window's display can show HDR. */
+export function hdrDisplay(win: Window = window): boolean {
+	return win.matchMedia('(dynamic-range: high)').matches;
 }
 
 /**
@@ -29,7 +51,9 @@ interface Stored {
  */
 export class Thumbnails {
 	private readonly urls = new Map<string, string>();
-	private readonly pending = new Map<string, Promise<string | null>>();
+	/** HDR flags by media URL, learnt while making thumbnails. */
+	private readonly hdr = new Map<string, boolean>();
+	private readonly pending = new Map<string, Promise<Thumb>>();
 	private readonly queue: (() => Promise<void>)[] = [];
 	private active = 0;
 	private pruned = false;
@@ -44,22 +68,25 @@ export class Thumbnails {
 	/** The key a tile shows for `media` at `needPx` (its longest side × pixel ratio). */
 	keyFor(media: MediaSource, natural: Size | undefined, needPx: number): string | null {
 		const bucket = bucketFor(media, natural, needPx);
-		return bucket === null ? null : `${media.src}|${bucket}`;
+		return bucket === null ? null : `${VERSION}|${media.src}|${bucket}`;
 	}
 
 	/**
 	 * A URL for a thumbnail of `media` covering `needPx`, or null when the
 	 * original should be shown (small images, GIF, SVG, or decoding failed).
 	 */
-	get(media: MediaSource, natural: Size | undefined, needPx: number): Promise<string | null> {
+	get(media: MediaSource, natural: Size | undefined, needPx: number): Promise<Thumb> {
 		const bucket = bucketFor(media, natural, needPx);
-		if (bucket === null) return Promise.resolve(null);
-		const key = `${media.src}|${bucket}`;
+		if (bucket === null) return Promise.resolve(NONE);
+		const key = `${VERSION}|${media.src}|${bucket}`;
+		const hdr = this.hdr.get(media.src) === true && hdrDisplay();
 		const ready = this.urls.get(key);
-		if (ready) {
-			this.urls.delete(key);
-			this.urls.set(key, ready);
-			return Promise.resolve(ready);
+		if (ready || (hdr && media.kind === 'image')) {
+			if (ready) {
+				this.urls.delete(key);
+				this.urls.set(key, ready);
+			}
+			return Promise.resolve({ url: hdr && media.kind === 'image' ? null : (ready ?? null), hdr });
 		}
 		let job = this.pending.get(key);
 		if (!job) {
@@ -82,20 +109,31 @@ export class Thumbnails {
 		media: MediaSource,
 		natural: Size | undefined,
 		bucket: number,
-	): Promise<string | null> {
+	): Promise<Thumb> {
 		const db = await openDatabase();
 		const request = db?.transaction(THUMBS).objectStore(THUMBS).get(key) as IDBRequest<Stored | undefined> | undefined;
 		const stored = request ? await settle(request) : null;
-		if (stored?.blob) return this.remember(key, stored.blob);
-		const blob = await this.schedule(() => this.make(media, natural, bucket));
-		if (!blob) return null;
+		if (stored && (stored.blob || stored.hdr)) {
+			this.hdr.set(media.src, stored.hdr === true);
+			return this.result(key, media, stored.blob ?? null, stored.hdr === true);
+		}
+		const made = await this.schedule(() => this.make(media, natural, bucket));
+		if (!made || (!made.blob && !made.hdr)) return NONE;
+		this.hdr.set(media.src, made.hdr);
 		if (db) {
-			db.transaction(THUMBS, 'readwrite')
-				.objectStore(THUMBS)
-				.put({ blob, bytes: blob.size, at: Date.now() } satisfies Stored, key);
+			const entry: Stored = { bytes: made.blob?.size ?? 0, at: Date.now(), hdr: made.hdr };
+			if (made.blob) entry.blob = made.blob;
+			db.transaction(THUMBS, 'readwrite').objectStore(THUMBS).put(entry, key);
 			this.pruneOnce(db);
 		}
-		return this.remember(key, blob);
+		return this.result(key, media, made.blob, made.hdr);
+	}
+
+	private result(key: string, media: MediaSource, blob: Blob | null, hdr: boolean): Thumb {
+		const showHdr = hdr && hdrDisplay();
+		// An HDR photo on an HDR display: the original, never an SDR copy.
+		if (showHdr && media.kind === 'image') return { url: null, hdr: true };
+		return { url: blob ? this.remember(key, blob) : null, hdr: showHdr };
 	}
 
 	private remember(key: string, blob: Blob): string | null {
@@ -139,11 +177,19 @@ export class Thumbnails {
 		}
 	}
 
-	private async make(media: MediaSource, natural: Size | undefined, bucket: number): Promise<Blob | null> {
+	private async make(
+		media: MediaSource,
+		natural: Size | undefined,
+		bucket: number,
+	): Promise<{ blob: Blob | null; hdr: boolean }> {
 		if (media.kind === 'video') return posterFrame(media.src, bucket);
-		const source = media.file
-			? new Blob([await this.app.vault.readBinary(media.file)])
-			: new Blob([(await requestUrl({ url: media.src })).arrayBuffer]);
+		const buffer = media.file
+			? await this.app.vault.readBinary(media.file)
+			: (await requestUrl({ url: media.src })).arrayBuffer;
+		const hdr = isHdrHeader(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, HEADER_BYTES)));
+		// No point encoding an SDR copy nobody on this display will see.
+		if (hdr && hdrDisplay()) return { blob: null, hdr };
+		const source = new Blob([buffer]);
 		const landscape = !natural || natural.width >= natural.height;
 		const bitmap = await createImageBitmap(
 			source,
@@ -154,9 +200,9 @@ export class Thumbnails {
 		try {
 			const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
 			const context = canvas.getContext('2d');
-			if (!context) return null;
+			if (!context) return { blob: null, hdr };
 			context.drawImage(bitmap, 0, 0);
-			return await canvas.convertToBlob({ type: 'image/webp', quality: QUALITY });
+			return { blob: await canvas.convertToBlob({ type: 'image/webp', quality: QUALITY }), hdr };
 		} finally {
 			bitmap.close();
 		}
@@ -211,7 +257,7 @@ const POSTER_TIMEOUT_MS = 8000;
  * Obsidian's vault resource URLs allow it, and remote hosts need to send
  * CORS headers, or this returns null and the tile shows a placeholder.
  */
-function posterFrame(src: string, bucket: number): Promise<Blob | null> {
+function posterFrame(src: string, bucket: number): Promise<{ blob: Blob | null; hdr: boolean }> {
 	return new Promise((resolve) => {
 		const video = createEl('video');
 		video.muted = true;
@@ -221,13 +267,14 @@ function posterFrame(src: string, bucket: number): Promise<Blob | null> {
 		// remote hosts allow reading frames when the request is made with CORS.
 		video.crossOrigin = 'anonymous';
 		let done = false;
+		let hdr = false;
 		const finish = (blob: Blob | null): void => {
 			if (done) return;
 			done = true;
 			window.clearTimeout(timer);
 			video.removeAttribute('src');
 			video.load();
-			resolve(blob);
+			resolve({ blob, hdr });
 		};
 		const timer = window.setTimeout(() => finish(null), POSTER_TIMEOUT_MS);
 		video.onerror = () => finish(null);
@@ -239,6 +286,7 @@ function posterFrame(src: string, bucket: number): Promise<Blob | null> {
 			const width = video.videoWidth;
 			const height = video.videoHeight;
 			if (!width || !height) return finish(null);
+			hdr = isHdrFrame(video);
 			const scale = Math.min(1, bucket / Math.max(width, height));
 			const canvas = new OffscreenCanvas(Math.round(width * scale), Math.round(height * scale));
 			const context = canvas.getContext('2d');
@@ -255,4 +303,20 @@ function posterFrame(src: string, bucket: number): Promise<Blob | null> {
 		};
 		video.src = src;
 	});
+}
+
+/** Transfer functions WebCodecs reports for HDR video. */
+const HDR_VIDEO_TRANSFERS = new Set(['pq', 'hlg', 'smpte2084', 'arib-std-b67']);
+
+/** Reads the current frame's colour space through WebCodecs. */
+function isHdrFrame(video: HTMLVideoElement): boolean {
+	if (typeof VideoFrame === 'undefined') return false;
+	try {
+		const frame = new VideoFrame(video);
+		const transfer = frame.colorSpace.transfer ?? '';
+		frame.close();
+		return HDR_VIDEO_TRANSFERS.has(transfer);
+	} catch {
+		return false;
+	}
 }
