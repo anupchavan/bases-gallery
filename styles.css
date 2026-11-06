@@ -115,7 +115,7 @@
 	height: var(--zoom-height);
 	z-index: var(--layer-modal);
 	object-fit: cover;
-	border-radius: var(--bases-gallery-radius, var(--radius-s));
+	border-radius: calc(var(--bases-gallery-radius, var(--radius-s)) / var(--zoom-scale, 1));
 	cursor: zoom-out;
 	transition: transform 300ms cubic-bezier(0.2, 0, 0.2, 1);
 }

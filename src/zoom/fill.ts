@@ -81,7 +81,12 @@ export class FillZoom extends Component {
 		const scale = Math.min(scaleX, scaleY);
 		const dx = ((viewW - rect.width) / 2 - rect.left) / scale;
 		const dy = ((viewH - rect.height) / 2 - rect.top) / scale;
-		clone.setCssProps({ '--zoom-transform': `scale(${scale}) translate3d(${dx}px, ${dy}px, 0)` });
+		clone.setCssProps({
+			'--zoom-transform': `scale(${scale}) translate3d(${dx}px, ${dy}px, 0)`,
+			// The radius is drawn before the scale, so divide it by the scale to
+			// keep the same visible corner on every image, whatever its zoom.
+			'--zoom-scale': `${scale}`,
+		});
 
 		// Let the start position paint, then switch on the open state so the
 		// transition runs.
