@@ -10,7 +10,7 @@
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint . --max-warnings 0 && stylelint styles.css --max-warnings 0",
 		"lint:fix": "eslint . --fix",
-		"test": "node --test 'scripts/*.test.mjs'",
+		"test": "node --test 'scripts/*.test.mjs' 'test/*.test.mjs'",
 		"sync:local": "node scripts/sync-local.mjs"
 	},
 	"keywords": [],

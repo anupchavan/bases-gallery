@@ -1,5 +1,6 @@
 import { Plugin } from 'obsidian';
-import { GALLERY_VIEW_TYPE, GalleryView } from './gallery-view';
+import { GALLERY_VIEW_TYPE, GalleryView } from './view/gallery-view';
+import { galleryViewOptions } from './view/options';
 
 export default class BasesGalleryPlugin extends Plugin {
 	onload(): void {
@@ -8,6 +9,7 @@ export default class BasesGalleryPlugin extends Plugin {
 			icon: 'lucide-layout-grid',
 			factory: (controller, containerEl) =>
 				new GalleryView(controller, containerEl),
+			options: galleryViewOptions,
 		});
 	}
 }

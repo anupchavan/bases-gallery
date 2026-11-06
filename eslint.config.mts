@@ -10,6 +10,7 @@ export default defineConfig(
 		'esbuild.config.mjs',
 		'stylelint.config.mjs',
 		'scripts',
+		'test',
 		'version-bump.mjs',
 		'versions.json',
 		'main.js',
