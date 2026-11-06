@@ -697,3 +697,8 @@ body {
 .media-manager-zoom-stage.is-swapping .media-manager-zoom-media {
 	transition: none;
 }
+
+/* A media note's embed in the editor: the media file's own embed, without the paragraph's margins. */
+.media-manager-note-embed > p {
+	margin: 0;
+}

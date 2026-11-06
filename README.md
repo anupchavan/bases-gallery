@@ -65,6 +65,10 @@ In a zoomed photo or video, Cmd-← and Cmd-→ (Ctrl on Windows and Linux) show
 
 Images in your notes open with the same zoom instead of Obsidian's image viewer. Turn this off in **Settings → Media Manager → Zoom images in notes**. Linked images and small images such as icons keep Obsidian's behaviour.
 
+### Media notes
+
+A note whose `url` property links to a photo, video or PDF in your vault is a media note. Embedding it (`![[Sunset]]`) shows the media itself, like embedding the file, without the note's title, border or open link. Sizes work as usual: `![[Sunset|300]]`. Change or clear the property in **Settings → Media Manager → Media note property**.
+
 ### Supported files
 
 Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). PDFs in your vault show their first page and open in Obsidian's own PDF viewer. HDR photos and videos are detected; **Settings → Media Manager → HDR tiles** chooses whether tiles show them in HDR.

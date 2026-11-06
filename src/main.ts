@@ -10,6 +10,7 @@ export interface Stepper {
 }
 import { galleryViewOptions } from './view/options';
 import { NoteImageZoom } from './zoom/note-images';
+import { MediaNoteEmbeds } from './embeds/media-notes';
 
 export default class MediaManagerPlugin extends Plugin {
 	settings: GallerySettings = { ...DEFAULT_SETTINGS };
@@ -27,6 +28,14 @@ export default class MediaManagerPlugin extends Plugin {
 		});
 		this.addSettingTab(new GallerySettingTab(this.app, this));
 		this.addChild(new NoteImageZoom(this.app, () => this.settings.zoomNoteImages));
+		this.addChild(
+			new MediaNoteEmbeds(
+				this.app,
+				() => this.settings.mediaNoteProperty.trim(),
+				(processor) => this.registerMarkdownPostProcessor(processor),
+				(extension) => this.registerEditorExtension(extension),
+			),
+		);
 		// Shown only while a photo or video is zoomed. Mod+←/→ (and ←/→ on
 		// photos) already work in the zoom; these let people bind their own
 		// keys in Settings → Hotkeys.

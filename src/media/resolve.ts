@@ -44,12 +44,12 @@ export function resolveEntryMedia(
 
 	if (value instanceof ListValue) {
 		for (let i = 0; i < value.length(); i++) {
-			const media = fromText(app, value.get(i).toString(), entry.file);
+			const media = resolveMediaText(app, value.get(i).toString(), entry.file);
 			if (media) return media;
 		}
 		return null;
 	}
-	return fromText(app, value.toString(), entry.file);
+	return resolveMediaText(app, value.toString(), entry.file);
 }
 
 function fromFile(app: App, file: TFile | null): MediaSource | null {
@@ -100,7 +100,8 @@ function stripWrapping(text: string): string {
 	}
 }
 
-function fromText(
+/** Resolves a media property value written in a note to a photo, video or PDF. */
+export function resolveMediaText(
 	app: App,
 	raw: string,
 	sourceFile: TFile,
