@@ -1,10 +1,13 @@
 import { App, requestUrl } from 'obsidian';
 import { THUMBS, openDatabase, settle } from './db';
 import { HEADER_BYTES, type Size, isHdrHeader } from './dimensions';
+import { renderFirstPage } from './pdf';
 import { MediaSource } from './resolve';
 
 /** Longest side of a stored thumbnail, in px. A tile uses the smallest that covers it. */
 const BUCKETS = [256, 512, 1024, 2048];
+/** PDF pages are drawn on the main thread, so they stop at this bucket. */
+const PDF_MAX_BUCKET = 1024;
 const QUALITY = 0.82;
 /** Bumped when stored thumbnails change meaning, so older entries are ignored. */
 const VERSION = 3;
@@ -44,8 +47,8 @@ export function hdrDisplay(win: Window = window): boolean {
 }
 
 /**
- * Small WebP copies of images, made once per device and kept in IndexedDB,
- * so tiles decode a few hundred kilobytes instead of a full photo. Making one
+ * Small WebP copies of images, video posters and PDF first pages, made
+ * once per device and kept in IndexedDB, so tiles decode a few hundred kilobytes instead of a full photo. Making one
  * reads the file once; `createImageBitmap` decodes and resizes it off the
  * main thread and an `OffscreenCanvas` encodes it.
  */
@@ -189,6 +192,10 @@ export class Thumbnails {
 		bucket: number,
 	): Promise<{ blob: Blob | null; hdr: boolean }> {
 		if (media.kind === 'video') return posterFrame(media.src, bucket);
+		if (media.kind === 'pdf') {
+			const blob = media.file ? await renderFirstPage(this.app, media.file, bucket, QUALITY) : null;
+			return { blob, hdr: false };
+		}
 		const buffer = media.file
 			? await this.app.vault.readBinary(media.file)
 			: (await requestUrl({ url: media.src })).arrayBuffer;
@@ -249,6 +256,8 @@ function bucketFor(media: MediaSource, natural: Size | undefined, needPx: number
 		const largest = natural ? Math.max(natural.width, natural.height) : bucket;
 		return BUCKETS.find((b) => b >= Math.min(bucket, largest)) ?? bucket;
 	}
+	// A PDF always needs its first page drawn.
+	if (media.kind === 'pdf') return Math.min(bucket, PDF_MAX_BUCKET);
 	// Small originals are already cheap: show them as they are.
 	if (natural && Math.max(natural.width, natural.height) <= bucket * 1.25) return null;
 	return bucket;

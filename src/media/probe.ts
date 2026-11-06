@@ -1,15 +1,18 @@
 import { App, TFile } from 'obsidian';
 import { HEADER_BYTES, Size, sizeFromHeader } from './dimensions';
+import { pdfSize } from './pdf';
 import { MediaSource } from './resolve';
 
 /**
  * Finds a media item's displayed size as cheaply as possible:
  * - vault images: the file's header bytes, parsed;
  * - videos: the container header, through a `<video preload="metadata">`;
+ * - PDFs: page 1, through PDF.js;
  * - anything else: the decoded image.
  */
 export async function probeSize(app: App, media: MediaSource): Promise<Size | null> {
 	if (media.kind === 'video') return withTimeout(videoSize(media.src));
+	if (media.kind === 'pdf') return media.file ? withTimeout(pdfSize(app, media.file)) : null;
 	if (media.file) {
 		const size = await withTimeout(headerSize(app, media.file));
 		if (size) return size;

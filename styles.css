@@ -564,3 +564,43 @@ video.bases-gallery-zoom-media {
 	font-size: var(--font-ui-medium);
 	font-weight: calc(var(--font-weight) + var(--bold-modifier));
 }
+
+/*
+ * PDFs. Tiles carry the page count in the duration chip. In the zoom,
+ * Obsidian's own PDF viewer fades in over the page 1 thumbnail once the box
+ * has arrived, and fades out before the box shrinks back.
+ */
+.bases-gallery-tile .bases-gallery-pages {
+	gap: var(--size-2-2);
+	--icon-size: var(--bases-gallery-chip-icon);
+	--icon-stroke: var(--icon-xs-stroke-width);
+}
+
+.bases-gallery-pages-icon {
+	display: flex;
+}
+
+.bases-gallery-zoom-pdf {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--background-primary);
+	cursor: auto;
+	opacity: 0;
+	transition: opacity var(--anim-duration-fast, 140ms) linear;
+}
+
+.bases-gallery-zoom-pdf.is-loaded {
+	opacity: 1;
+}
+
+/* The embed renders inside a paragraph; drop its margins so it fills the box. */
+.bases-gallery-zoom-pdf > * {
+	margin: 0;
+}
+
+/* The viewer's toolbar runs along the top, so the info button moves to the bottom. */
+.bases-gallery-zoom-box.is-pdf .bases-gallery-zoom-info {
+	top: auto;
+	bottom: var(--bases-gallery-chip-inset);
+}

@@ -1,4 +1,5 @@
 import { Plugin } from 'obsidian';
+import { releasePdfWorker } from './media/pdf';
 import { DEFAULT_SETTINGS, GallerySettingTab, GallerySettings } from './settings';
 import { GALLERY_VIEW_TYPE, GalleryView } from './view/gallery-view';
 import { galleryViewOptions } from './view/options';
@@ -15,6 +16,7 @@ export default class BasesGalleryPlugin extends Plugin {
 			options: galleryViewOptions,
 		});
 		this.addSettingTab(new GallerySettingTab(this.app, this));
+		this.register(releasePdfWorker);
 		// Not awaited: startup stays a few registrations; views use the
 		// defaults until the saved settings arrive a moment later.
 		void this.loadSettings();
