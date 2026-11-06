@@ -11,6 +11,7 @@ export default defineConfig(
 		'stylelint.config.mjs',
 		'scripts',
 		'test',
+		'.local-deploy-backups',
 		'version-bump.mjs',
 		'versions.json',
 		'main.js',

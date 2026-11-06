@@ -1,7 +1,8 @@
 import { BasesView, QueryController } from 'obsidian';
-import { JustifiedLayout, justify } from '../layout/justify';
+import { Box, justify } from '../layout/justify';
+import { mosaic } from '../layout/mosaic';
 import { MediaSource, resolveEntryMedia } from '../media/resolve';
-import { GalleryConfig, readGalleryConfig } from './options';
+import { GalleryConfig, parseSize, readGalleryConfig } from './options';
 import { Tile } from './tile';
 
 export const GALLERY_VIEW_TYPE = 'gallery';
@@ -15,6 +16,17 @@ const BUFFER_BELOW = 2;
 interface Item {
 	key: string;
 	media: MediaSource;
+	/** 0 small, 1 medium, 2 large. */
+	size: number;
+}
+
+interface PlacedLayout {
+	boxes: Box[];
+	/** Item indices sorted by top edge, for finding visible tiles. */
+	order: number[];
+	/** Tallest tile, so a search can start early enough. */
+	maxHeight: number;
+	height: number;
 }
 
 export class GalleryView extends BasesView {
@@ -26,7 +38,7 @@ export class GalleryView extends BasesView {
 
 	private items: Item[] = [];
 	private settings: GalleryConfig | null = null;
-	private layout: JustifiedLayout | null = null;
+	private layout: PlacedLayout | null = null;
 	private layoutWidth = 0;
 	private gap = 0;
 
@@ -81,7 +93,13 @@ export class GalleryView extends BasesView {
 		const items: Item[] = [];
 		for (const entry of this.data.data) {
 			const media = resolveEntryMedia(this.app, entry, settings.mediaProperty);
-			if (media) items.push({ key: `${entry.file.path}\n${media.src}`, media });
+			if (!media) continue;
+			let size = 1;
+			if (settings.sizeProperty) {
+				const value = entry.getValue(settings.sizeProperty);
+				if (value?.isTruthy()) size = parseSize(value.toString());
+			}
+			items.push({ key: `${entry.file.path}\n${media.src}`, media, size });
 		}
 		this.settings = settings;
 		this.items = items;
@@ -127,12 +145,27 @@ export class GalleryView extends BasesView {
 		const ratios = this.items.map(
 			(item) => this.ratios.get(item.media.src) ?? fallback,
 		);
-		this.layout = justify(ratios, {
-			width: this.layoutWidth,
-			targetHeight: settings.rowHeight,
-			gap: this.gap,
-			maxCropPerSide: settings.maxCropPerSide,
-		});
+		const boxes =
+			settings.layout === 'rows'
+				? justify(ratios, {
+						width: this.layoutWidth,
+						targetHeight: settings.tileSize,
+						gap: this.gap,
+						maxCropPerSide: settings.maxCropPerSide,
+					}).boxes
+				: mosaic(
+						this.items.map((item, i) => ({
+							ratio: ratios[i] ?? fallback,
+							size: item.size,
+						})),
+						{
+							width: this.layoutWidth,
+							tileSize: settings.tileSize,
+							gap: this.gap,
+							maxCropPerSide: settings.maxCropPerSide,
+						},
+					).boxes;
+		this.layout = placed(boxes);
 		this.sizerEl.setCssProps({
 			'--bases-gallery-height': `${this.layout.height}px`,
 		});
@@ -150,23 +183,26 @@ export class GalleryView extends BasesView {
 		const bottom = view.bottom + span * BUFFER_BELOW;
 
 		const wanted = new Set<string>();
-		const rows = layout.rows;
-		for (let r = firstRowBelow(rows, top); r < rows.length; r++) {
-			const row = rows[r];
-			if (!row || row.y > bottom) break;
-			for (let i = row.start; i < row.end; i++) {
-				const item = this.items[i];
-				const box = layout.boxes[i];
-				if (!item || !box) continue;
-				wanted.add(item.key);
-				let tile = this.mounted.get(item.key);
-				if (!tile) {
-					tile = this.takeTile();
-					this.mounted.set(item.key, tile);
-				}
-				tile.place(box);
-				tile.show(item.media);
+		const { boxes, order } = layout;
+		for (
+			let k = firstAtOrBelow(layout, top - layout.maxHeight);
+			k < order.length;
+			k++
+		) {
+			const i = order[k] ?? 0;
+			const box = boxes[i];
+			const item = this.items[i];
+			if (!box || !item) continue;
+			if (box.y > bottom) break;
+			if (box.y + box.height < top) continue;
+			wanted.add(item.key);
+			let tile = this.mounted.get(item.key);
+			if (!tile) {
+				tile = this.takeTile();
+				this.mounted.set(item.key, tile);
 			}
+			tile.place(box);
+			tile.show(item.media);
 		}
 
 		for (const [key, tile] of this.mounted) {
@@ -212,22 +248,25 @@ export class GalleryView extends BasesView {
 	}
 
 	/** Remembers where the first visible tile sits so a relayout can keep it still. */
-	private captureAnchor(): { index: number; offset: number } | null {
+	private captureAnchor(): { key: string; offset: number } | null {
 		const { layout } = this;
-		const scroller = this.scrollers[0];
-		if (!layout || !scroller) return null;
+		if (!layout || !this.scrollers[0]) return null;
 		const view = this.visibleRange();
-		const r = firstRowBelow(layout.rows, view.top);
-		const row = layout.rows[r];
-		if (!row) return null;
-		return { index: row.start, offset: row.y - view.top };
+		for (let k = firstAtOrBelow(layout, view.top); k < layout.order.length; k++) {
+			const i = layout.order[k] ?? 0;
+			const box = layout.boxes[i];
+			const item = this.items[i];
+			if (box && item) return { key: item.key, offset: box.y - view.top };
+		}
+		return null;
 	}
 
-	private restoreAnchor(anchor: { index: number; offset: number } | null): void {
+	private restoreAnchor(anchor: { key: string; offset: number } | null): void {
 		const { layout } = this;
 		const scroller = this.scrollers[0];
 		if (!anchor || !layout || !scroller) return;
-		const box = layout.boxes[anchor.index];
+		const index = this.items.findIndex((item) => item.key === anchor.key);
+		const box = layout.boxes[index];
 		if (!box) return;
 		const view = this.visibleRange();
 		const delta = box.y - view.top - anchor.offset;
@@ -254,17 +293,28 @@ export class GalleryView extends BasesView {
 	}
 }
 
-/** Index of the first row whose bottom edge is below `y` (binary search). */
-function firstRowBelow(
-	rows: readonly { y: number; height: number }[],
-	y: number,
-): number {
+function placed(boxes: Box[]): PlacedLayout {
+	const order = boxes.map((_, i) => i);
+	order.sort((a, b) => (boxes[a]?.y ?? 0) - (boxes[b]?.y ?? 0));
+	let maxHeight = 0;
+	let height = 0;
+	for (const box of boxes) {
+		if (!box) continue;
+		maxHeight = Math.max(maxHeight, box.height);
+		height = Math.max(height, box.y + box.height);
+	}
+	return { boxes, order, maxHeight, height };
+}
+
+/** Position in `order` of the first tile whose top edge is at or below `y` (binary search). */
+function firstAtOrBelow(layout: PlacedLayout, y: number): number {
+	const { order, boxes } = layout;
 	let lo = 0;
-	let hi = rows.length;
+	let hi = order.length;
 	while (lo < hi) {
 		const mid = (lo + hi) >> 1;
-		const row = rows[mid];
-		if (row && row.y + row.height < y) lo = mid + 1;
+		const top = boxes[order[mid] ?? 0]?.y ?? 0;
+		if (top < y) lo = mid + 1;
 		else hi = mid;
 	}
 	return lo;

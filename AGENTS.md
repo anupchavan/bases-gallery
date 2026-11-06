@@ -3,7 +3,7 @@
 ## Project overview
 
 - Target: Obsidian Community Plugin (TypeScript → bundled JavaScript), plugin id `bases-gallery`.
-- Adds a **Gallery** layout to Bases through the public `registerBasesView` API (`src/main.ts`, `src/gallery-view.ts`). Requires Obsidian 1.13.0+ (`minAppVersion`).
+- Adds a **Gallery** layout to Bases through the public `registerBasesView` API (`src/main.ts`, `src/view/gallery-view.ts`). Requires Obsidian 1.13.0+ (`minAppVersion`).
 - Use only Obsidian's public, typed API from the `obsidian` package. No private or undocumented APIs, no monkey-patching of Obsidian internals, no casts to reach unexported members.
 - Entry point: `src/main.ts` compiled to `main.js` and loaded by Obsidian.
 - Required release artifacts: `main.js`, `manifest.json`, and optional `styles.css`.
