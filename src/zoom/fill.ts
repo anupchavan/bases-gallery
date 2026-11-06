@@ -28,8 +28,11 @@ export interface ZoomOptions {
 	shown: HTMLImageElement | null;
 	/** The pane the gallery scrolls in. */
 	scroller: HTMLElement | null;
-	/** A video already playing this file (the hover preview), to carry on with. */
-	video?: HTMLVideoElement | null;
+	/**
+	 * Takes a video already playing this file (the hover preview), to carry
+	 * on with. Called after the zoom has measured the page.
+	 */
+	takeVideo?: () => HTMLVideoElement | null;
 }
 
 interface Rect {
@@ -59,6 +62,8 @@ export class FillZoom extends Component {
 	/** The tile's box, in window coordinates when the zoom opened. */
 	private base: Rect | null = null;
 	private natural = { width: 0, height: 0 };
+	/** Space kept above and below the media, from --bases-gallery-zoom-margin. */
+	private margin = 0;
 	private scope: Scope | null = null;
 	private closing = false;
 	private wheelTimer = 0;
@@ -94,13 +99,19 @@ export class FillZoom extends Component {
 		const rect = tileEl.getBoundingClientRect();
 		if (rect.width === 0 || rect.height === 0) return;
 
+		// Measure everything first, while the page's style and layout are
+		// clean: a read after any DOM change would force a style and layout
+		// pass into the opening frame.
 		const { shown, scroller } = options;
-		const video = media.kind === 'video' ? (options.video ?? null) : null;
+		const startScroll = scroller?.scrollTop ?? 0;
+		this.margin = parseFloat(tileEl.win.getComputedStyle(tileEl).getPropertyValue('--bases-gallery-zoom-margin')) || 0;
+		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+
+		const video = media.kind === 'video' ? (options.takeVideo?.() ?? null) : null;
 		const natural = {
 			width: media.width || video?.videoWidth || shown?.naturalWidth || rect.width,
 			height: media.height || video?.videoHeight || shown?.naturalHeight || rect.height,
 		};
-		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
 		const overlay = doc.body.createDiv('bases-gallery-zoom-overlay');
 		const stage = doc.body.createDiv('bases-gallery-zoom-stage');
@@ -174,7 +185,6 @@ export class FillZoom extends Component {
 		// the page, then the zoom closes after 40 px, back onto the tile
 		// wherever it now is. The ride is a transform, so it isn't animated.
 		if (scroller) {
-			const startScroll = scroller.scrollTop;
 			// Only the user's own scrolling closes the zoom; layout updates that
 			// move the page just move the media with it.
 			let scrolled = 0;
@@ -268,12 +278,11 @@ export class FillZoom extends Component {
 	private fit(): void {
 		const { boxEl: box, stageEl: stage, overlayEl: overlay, base, natural } = this;
 		if (!box || !stage || !overlay || !base) return;
-		const full = this.isFullscreen();
-		const margin = full
-			? 0
-			: parseFloat(box.win.getComputedStyle(overlay).getPropertyValue('--bases-gallery-zoom-margin')) || 0;
-		const viewW = stage.clientWidth;
-		const viewH = stage.clientHeight;
+		// Read from the window and the tile, not the new elements: reading
+		// those would force a style and layout pass in the opening frame.
+		const margin = this.isFullscreen() ? 0 : this.margin;
+		const viewW = box.win.innerWidth;
+		const viewH = box.win.innerHeight;
 		const roomH = Math.max(1, viewH - 2 * margin);
 		// The media's shape at the tile's size, covering the tile.
 		const ratio = natural.width / natural.height;

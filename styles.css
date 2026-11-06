@@ -97,8 +97,6 @@
 /* Fill on click: medium-zoom's timing (300 ms, cubic-bezier(.2,0,.2,1)). */
 .bases-gallery-zoom-overlay {
 	--bases-gallery-zoom-duration: 300ms;
-	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
-	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
 	--bases-gallery-dark-fade: 150ms;
 
 	position: fixed;
@@ -320,6 +318,8 @@ video.bases-gallery-zoom-media {
  */
 .bases-gallery,
 .bases-gallery-zoom-stage {
+	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
+	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
 	--bases-gallery-chip-size: calc(var(--icon-s) + var(--size-4-3));
 	--bases-gallery-chip-inset: var(--size-4-2);
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);

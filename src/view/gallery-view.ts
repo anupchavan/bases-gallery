@@ -419,11 +419,15 @@ export class GalleryView extends BasesView {
 		}
 		const { kind, src } = item.media;
 		const size = this.sizes.get(src);
-		const video = kind === 'video' ? this.preview?.handOff(tile.el) : null;
+		const el = tile.el;
 		this.zoom?.open(
-			tile.el,
+			el,
 			{ kind, src, width: size?.width ?? 0, height: size?.height ?? 0 },
-			{ shown: tile.image, scroller: this.scrollers[0] ?? null, video },
+			{
+				shown: tile.image,
+				scroller: this.scrollers[0] ?? null,
+				takeVideo: () => this.preview?.handOff(el) ?? null,
+			},
 		);
 	}
 
