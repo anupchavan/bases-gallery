@@ -30,3 +30,6 @@ data.json
 # Local deployment paths and rollback copies
 .local-deploy.json
 .local-deploy-backups/
+
+# Local agent worktrees
+.claude/
