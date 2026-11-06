@@ -1,4 +1,5 @@
 import { App, Component, Scope, setIcon, setTooltip } from 'obsidian';
+import { formatTime } from '../util/format';
 
 /** Controls hide after this long without pointer movement while playing. */
 const IDLE_HIDE_MS = 2000;
@@ -238,12 +239,4 @@ export class VideoControls extends Component {
 	private button(cls: string): HTMLElement {
 		return this.rowEl.createEl('button', { cls: `bases-gallery-control ${cls}`, attr: { type: 'button' } });
 	}
-}
-
-function formatTime(total: number): string {
-	const seconds = Math.max(0, Math.floor(total));
-	const h = Math.floor(seconds / 3600);
-	const m = Math.floor((seconds % 3600) / 60);
-	const s = String(seconds % 60).padStart(2, '0');
-	return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
