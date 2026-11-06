@@ -1,6 +1,6 @@
 # Bases Gallery
 
-An Obsidian plugin that adds a **Gallery** layout to [Bases](https://help.obsidian.md/bases).
+An Obsidian plugin that adds a **Gallery** layout to [Bases](https://help.obsidian.md/bases): your notes' photos and videos as a mosaic or justified rows, with MUBI-style zoom, Netflix-style hover previews and a video player.
 
 Requires Obsidian 1.13.0 or later, with **Bases** turned on in **Settings → Core plugins**.
 
@@ -10,7 +10,65 @@ Until the plugin is in the community store, install it with [BRAT](https://githu
 
 ## Usage
 
-In a base, add a view and pick **Gallery** as its layout.
+In a base, add a view and pick **Gallery** as its layout. Then choose the **Media property**: the property that holds each note's photo or video.
+
+The property can be text or a list. Each value can be:
+
+- a wiki link: `"[[sunset.jpg]]"`
+- a Markdown link: `"[Sunset](media/sunset.jpg)"`
+- a vault path: `media/sunset.jpg`
+- a web address: `https://example.com/sunset.jpg`
+
+```yaml
+---
+url: "[[sunset.jpg]]"
+---
+```
+
+A list shows its first photo or video. With no media property chosen, a base that lists media files directly (for example with a `file.ext` filter) shows each file itself.
+
+### Layouts
+
+- **Mosaic**: tiles of different sizes that interlock in rows and columns.
+- **Rows**: justified rows of equal height, like Google Photos, cropping each photo by at most 10% a side.
+
+**Tile size from** sets which tiles are larger:
+
+- **How related the note is**: notes with more links, backlinks and shared tags get bigger tiles.
+- **A property**: the **Size property** you choose, with `small`, `large` or a number.
+- **Nothing**: every tile aims for the same size.
+
+**Minimum tile size** keeps the smallest tiles legible.
+
+### Viewing
+
+- Click a photo or video to fill the window. Scroll, click outside or press Esc to close.
+- Cmd-click (Ctrl-click on Windows and Linux) opens the note instead.
+- Rest the pointer on a video to preview it. The mute button keeps its setting.
+- The **i** button in a zoomed photo or video shows the note's properties, the ones picked in the view's **Properties** menu.
+
+Video keys while zoomed:
+
+| Key | Action |
+| --- | --- |
+| Space or K | Play or pause |
+| ← and → | Back or forward 5 seconds |
+| J and L | Back or forward 10 seconds |
+| ↑ and ↓ | Volume |
+| M | Mute |
+| F | Fullscreen |
+| I | Properties |
+
+### Supported files
+
+Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). HDR photos and videos are detected; **Settings → Bases Gallery → HDR in tiles** chooses whether tiles show them in HDR.
+
+## Performance and privacy
+
+- Startup does no work: everything waits until a gallery opens.
+- Only the tiles on screen exist, so large vaults scroll smoothly.
+- Sizes and thumbnails are cached on your device (IndexedDB), never uploaded.
+- The plugin makes no network requests of its own. Web addresses in your notes are loaded by Obsidian like any embedded image.
 
 ## Contributing
 
