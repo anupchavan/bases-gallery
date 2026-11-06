@@ -1,6 +1,7 @@
 import { App, Component, MarkdownRenderer, Scope, TFile, setIcon } from 'obsidian';
 import type { MediaKind } from '../media/kinds';
 import { MUTED_KEY, VideoControls } from '../video/player';
+import type { DetailsContent } from '../view/details';
 
 /** medium-zoom's numbers, as measured on MUBI. */
 const DURATION_MS = 300;
@@ -41,10 +42,11 @@ export interface ZoomOptions {
 	 */
 	takeVideo?: () => HTMLVideoElement | null;
 	/**
-	 * Renders the note's properties into the details panel. Returns false
-	 * when there are none to show (no info button then).
+	 * Renders the note's properties into the details panel, with `owner` for
+	 * anything that must be unloaded when the zoom closes. Returns null when
+	 * there is nothing to show (no info button then).
 	 */
-	details?: (el: HTMLElement) => boolean;
+	details?: (el: HTMLElement, owner: Component) => DetailsContent | null;
 }
 
 interface Rect {
@@ -94,6 +96,7 @@ export class FillZoom extends Component {
 	private detailsEl: HTMLElement | null = null;
 	/** Room the details panel needs beside the media: its width plus two gaps. */
 	private detailsRoom = 0;
+	private onDetailsShown: (() => void) | null = null;
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
 
@@ -209,6 +212,7 @@ export class FillZoom extends Component {
 			if (this.stageEl !== stage || this.closing) return;
 			stage.addClass('is-ready');
 			if (media.kind === 'pdf') this.showPdf(session, box, media);
+			this.revealDetails();
 		};
 		session.registerDomEvent(box, 'transitionend', (evt) => {
 			if (evt.target === box && evt.propertyName === 'width') ready();
@@ -411,12 +415,20 @@ export class FillZoom extends Component {
 	 * the pointer is on the media; switched on, it stays, and the note's
 	 * properties show beside the media (or over it when there is no room).
 	 */
-	private addDetails(session: Component, stage: HTMLElement, box: HTMLElement, render: (el: HTMLElement) => boolean): void {
+	private addDetails(
+		session: Component,
+		stage: HTMLElement,
+		box: HTMLElement,
+		render: (el: HTMLElement, owner: Component) => DetailsContent | null,
+	): void {
 		const panel = stage.createDiv('bases-gallery-details');
-		if (!render(panel)) {
+		const content = render(panel, session);
+		if (!content) {
 			panel.detach();
 			return;
 		}
+		// Heavy parts (a map) wait until the panel first shows on screen.
+		this.onDetailsShown = content.onShown ?? null;
 		const info = box.createEl('button', {
 			cls: 'bases-gallery-zoom-info',
 			attr: { type: 'button', 'aria-label': 'Properties' },
@@ -433,6 +445,7 @@ export class FillZoom extends Component {
 		let leaveTimer = 0;
 		const peek = (on: boolean): void => {
 			stage.toggleClass('is-peeking', on && !held);
+			this.revealDetails();
 		};
 		const enter = (): void => {
 			window.clearTimeout(leaveTimer);
@@ -477,6 +490,17 @@ export class FillZoom extends Component {
 		this.infoEl?.toggleClass('is-active', on);
 		this.infoEl?.setAttr('aria-pressed', String(on));
 		this.stageEl?.toggleClass('has-details', on);
+		this.revealDetails();
+	}
+
+	/** Runs the panel's first-show work once it is actually on screen. */
+	private revealDetails(): void {
+		const stage = this.stageEl;
+		const shown = this.onDetailsShown;
+		if (!stage || !shown || !stage.hasClass('is-ready')) return;
+		if (!stage.hasClass('has-details') && !stage.hasClass('is-peeking')) return;
+		this.onDetailsShown = null;
+		shown();
 	}
 
 	private isFullscreen(): boolean {
@@ -533,6 +557,7 @@ export class FillZoom extends Component {
 		this.boxEl = null;
 		this.infoEl = null;
 		this.detailsEl = null;
+		this.onDetailsShown = null;
 		this.sourceEl = null;
 		this.base = null;
 		this.closing = false;

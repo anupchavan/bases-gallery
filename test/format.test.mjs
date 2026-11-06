@@ -36,3 +36,21 @@ test('parseSizeWeight: caps big numbers and ignores junk', () => {
 	assert.equal(parseSizeWeight('-2'), 1);
 	assert.equal(parseSizeWeight('0'), 1);
 });
+
+import { parseCoordinates } from '../src/util/format.ts';
+
+test('parseCoordinates: text and lists, as Obsidian Maps reads them', () => {
+	assert.deepEqual(parseCoordinates('48.85837, 2.294481'), [48.85837, 2.294481]);
+	assert.deepEqual(parseCoordinates('48.85837,2.294481'), [48.85837, 2.294481]);
+	assert.deepEqual(parseCoordinates('["48.85837", "2.294481"]'), [48.85837, 2.294481]);
+	assert.deepEqual(parseCoordinates('-33.8688, 151.2093'), [-33.8688, 151.2093]);
+});
+
+test('parseCoordinates: rejects anything that is not a place', () => {
+	assert.equal(parseCoordinates(''), null);
+	assert.equal(parseCoordinates('Paris'), null);
+	assert.equal(parseCoordinates('48.8'), null);
+	assert.equal(parseCoordinates('91, 0'), null);
+	assert.equal(parseCoordinates('0, 181'), null);
+	assert.equal(parseCoordinates('north, east'), null);
+});

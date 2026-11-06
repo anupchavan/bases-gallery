@@ -604,3 +604,18 @@ video.bases-gallery-zoom-media {
 	top: auto;
 	bottom: var(--bases-gallery-chip-inset);
 }
+
+/*
+ * The note's location on an Obsidian Maps map, at the foot of the panel.
+ * The embedded base's own header (view name, sort, filter) is hidden here
+ * only: it has no option to turn it off.
+ */
+.bases-gallery-detail-map {
+	margin-bottom: calc(-1 * var(--size-4-2));
+	overflow: hidden;
+	border-radius: 0 0 var(--bases-cards-radius, var(--radius-m)) var(--bases-cards-radius, var(--radius-m));
+}
+
+.bases-gallery-detail-map .bases-header {
+	display: none;
+}

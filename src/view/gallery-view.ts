@@ -429,7 +429,8 @@ export class GalleryView extends BasesView {
 				shown: tile.image,
 				scroller: this.scrollers[0] ?? null,
 				takeVideo: () => this.preview?.handOff(el) ?? null,
-				details: (detailsEl) => renderDetails(this.app, this.config, item.entry, detailsEl),
+				details: (detailsEl, owner) =>
+					renderDetails(this.app, this.config, item.entry, this.settings?.locationProperty ?? 'note.coordinates', detailsEl, owner),
 			},
 		);
 	}

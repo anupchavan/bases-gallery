@@ -24,3 +24,22 @@ export function parseSizeWeight(text: string): number {
 	if (value !== '' && Number.isFinite(number) && number > 0) return Math.min(number, 8);
 	return 1;
 }
+
+/**
+ * Reads a location the way Obsidian Maps does: "lat, lng" text, or a list
+ * of two numbers (which Bases prints as "lat, lng"). Returns null when it
+ * isn't a valid location, so no map is shown.
+ */
+export function parseCoordinates(text: string): [number, number] | null {
+	const parts = text
+		.replace(/[[\]"']/g, '')
+		.split(',')
+		.map((part) => part.trim())
+		.filter((part) => part !== '');
+	if (parts.length < 2) return null;
+	const lat = Number(parts[0]);
+	const lng = Number(parts[1]);
+	if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+	if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+	return [lat, lng];
+}

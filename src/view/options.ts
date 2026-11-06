@@ -12,7 +12,12 @@ export interface GalleryConfig {
 	sizeProperty: BasesPropertyId | null;
 	/** No tile is shorter than this, nor smaller in area than its square, in px. */
 	minTileSize: number;
+	/** Where a note was taken, for a map in the properties panel. */
+	locationProperty: BasesPropertyId;
 }
+
+/** Obsidian Maps' own examples keep a place in this property. */
+const DEFAULT_LOCATION_PROPERTY: BasesPropertyId = 'note.coordinates';
 
 export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 	return [
@@ -58,6 +63,13 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 			step: 10,
 			default: DEFAULT_MIN_TILE_SIZE,
 		},
+		{
+			type: 'property',
+			key: 'locationProperty',
+			displayName: 'Location property',
+			default: 'note.coordinates',
+			filter: (prop) => !prop.startsWith('file.'),
+		},
 	];
 }
 
@@ -70,6 +82,7 @@ export function readGalleryConfig(config: BasesViewConfig): GalleryConfig {
 		sizeBy: readSizeSource(config.get('sizeBy')),
 		sizeProperty: config.getAsPropertyId('sizeProperty'),
 		minTileSize: readNumber(config.get('minTileSize'), DEFAULT_MIN_TILE_SIZE),
+		locationProperty: config.getAsPropertyId('locationProperty') ?? DEFAULT_LOCATION_PROPERTY,
 	};
 }
 
