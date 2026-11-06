@@ -611,11 +611,23 @@ video.bases-gallery-zoom-media {
  * only: it has no option to turn it off.
  */
 .bases-gallery-detail-map {
+	height: var(--bases-gallery-map-height);
 	margin-bottom: calc(-1 * var(--size-4-2));
 	overflow: hidden;
+	background: var(--background-secondary);
 	border-radius: 0 0 var(--bases-cards-radius, var(--radius-m)) var(--bases-cards-radius, var(--radius-m));
 }
 
 .bases-gallery-detail-map .bases-header {
+	display: none;
+}
+
+/* The map credit (required by OpenStreetMap and OpenFreeMap) stays as
+   MapLibre's small info button, and shows in full on hover. */
+.bases-gallery-detail-map .maplibregl-ctrl-attrib.maplibregl-compact {
+	margin: var(--size-2-2);
+}
+
+.bases-gallery-detail-map .maplibregl-ctrl-attrib.maplibregl-compact:not(:hover) .maplibregl-ctrl-attrib-inner {
 	display: none;
 }

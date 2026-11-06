@@ -4,7 +4,7 @@ import { parseCoordinates } from '../util/format';
 /** Obsidian Maps' zoom for a single place: a neighbourhood. */
 const MAP_ZOOM = 13;
 /** Height of the map in the panel, in px. Maps reads this from the view. */
-const MAP_HEIGHT = 180;
+const MAP_HEIGHT = 140;
 
 export interface DetailsContent {
 	/** Called once, the first time the panel shows. */
@@ -44,7 +44,10 @@ export function renderDetails(
 	const place = location && !(location instanceof NullValue) ? parseCoordinates(location.toString()) : null;
 	if (!place) return order.length > 0 ? {} : null;
 
+	// The slot has its final height from the start, so the panel doesn't
+	// jump while Maps lays out (it first draws at its default height).
 	const mapEl = el.createDiv('bases-gallery-detail-map');
+	mapEl.setCssProps({ '--bases-gallery-map-height': `${MAP_HEIGHT}px` });
 	return {
 		onShown: () => {
 			const source = mapBase(entry.file.path, locationProperty);
