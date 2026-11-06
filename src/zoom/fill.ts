@@ -1,4 +1,4 @@
-import { App, Component, Scope, setIcon, setTooltip } from 'obsidian';
+import { App, Component, Scope, setIcon } from 'obsidian';
 import { MUTED_KEY, VideoControls } from '../video/player';
 
 /** medium-zoom's numbers, as measured on MUBI. */
@@ -13,6 +13,8 @@ const SCROLL_CLOSE_DELAY_MS = 150;
 const REFIT_SETTLE_MS = 400;
 /** Must match --bases-gallery-dark-fade: the fade to black before fullscreen. */
 const DARKEN_MS = 150;
+/** How long the properties preview waits for the pointer to reach the panel. */
+const PEEK_GRACE_MS = 200;
 
 export interface ZoomMedia {
 	kind: 'image' | 'video';
@@ -357,16 +359,47 @@ export class FillZoom extends Component {
 			panel.detach();
 			return;
 		}
-		const info = box.createEl('button', { cls: 'bases-gallery-zoom-info', attr: { type: 'button' } });
+		const info = box.createEl('button', {
+			cls: 'bases-gallery-zoom-info',
+			attr: { type: 'button', 'aria-label': 'Properties' },
+		});
 		setIcon(info, 'info');
-		setTooltip(info, 'Properties (i)', { placement: 'left' });
 		this.infoEl = info;
 		this.detailsEl = panel;
 		this.showDetails(this.detailsOn);
+
+		// Hovering the button (or the panel it shows) previews the panel.
+		// Switching it off hides the panel at once, and the preview stays
+		// off until the pointer has left the button and the panel.
+		let held = false;
+		let leaveTimer = 0;
+		const peek = (on: boolean): void => {
+			stage.toggleClass('is-peeking', on && !held);
+		};
+		const enter = (): void => {
+			window.clearTimeout(leaveTimer);
+			peek(true);
+		};
+		// A short grace, so the pointer can cross the gap to the panel.
+		const leave = (): void => {
+			window.clearTimeout(leaveTimer);
+			leaveTimer = window.setTimeout(() => {
+				held = false;
+				peek(false);
+			}, PEEK_GRACE_MS);
+		};
+		session.register(() => window.clearTimeout(leaveTimer));
+		for (const el of [info, panel]) {
+			session.registerDomEvent(el, 'pointerenter', enter);
+			session.registerDomEvent(el, 'pointerleave', leave);
+		}
 		session.registerDomEvent(info, 'click', (evt) => {
 			// The media's own click would close the zoom or pause the video.
 			evt.stopPropagation();
-			this.showDetails(!this.detailsOn);
+			const on = !this.detailsOn;
+			this.showDetails(on);
+			held = !on;
+			peek(on);
 		});
 		session.registerDomEvent(panel, 'click', (evt) => {
 			// Following a link leaves the gallery, so close the zoom behind it.

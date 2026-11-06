@@ -527,7 +527,8 @@ video.bases-gallery-zoom-media {
 	max-height: calc(var(--frame-height) - 3 * var(--bases-gallery-chip-inset) - 2 * var(--bases-gallery-chip-size));
 }
 
-.bases-gallery-zoom-stage.is-ready.has-details .bases-gallery-details {
+.bases-gallery-zoom-stage.is-ready.has-details .bases-gallery-details,
+.bases-gallery-zoom-stage.is-ready.is-peeking .bases-gallery-details {
 	opacity: 1;
 	pointer-events: auto;
 	transition-duration: var(--bases-gallery-preview-fade-in);
