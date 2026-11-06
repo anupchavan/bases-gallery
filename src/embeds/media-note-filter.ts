@@ -10,7 +10,8 @@ import { BasesFilter, NativeBasesApi, ParsedFilter, getNativeBasesApi } from './
 export class MediaNoteFilter {
 	private api: NativeBasesApi | null = null;
 	private preparing = false;
-	private parsedKey = '';
+	/** The settings value last parsed; settings replace it when it changes. */
+	private parsedFrom: BasesFilter | null = null;
 	private parsed: ParsedFilter | null = null;
 
 	constructor(
@@ -27,9 +28,8 @@ export class MediaNoteFilter {
 			return false;
 		}
 		try {
-			const key = JSON.stringify(filters);
-			if (key !== this.parsedKey) {
-				this.parsedKey = key;
+			if (filters !== this.parsedFrom) {
+				this.parsedFrom = filters;
 				this.parsed = this.api.parse(filters).filters ?? null;
 			}
 			const filter = this.parsed;
@@ -87,7 +87,7 @@ export function mountFilterEditor(
 				attr: { role: 'alert' },
 			});
 			const retry = host.createEl('button', { text: 'Retry', attr: { type: 'button' } });
-			retry.addEventListener('click', () => void mount());
+			retry.onClickEvent(() => void mount());
 		}
 	};
 	void mount();

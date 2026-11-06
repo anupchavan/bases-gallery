@@ -1,4 +1,4 @@
-import { EditorState, Extension, Prec, RangeSetBuilder, StateField } from '@codemirror/state';
+import { EditorState, Extension, Prec, RangeSetBuilder, StateField, Transaction } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import {
 	App,
@@ -139,15 +139,39 @@ interface EmbedState {
  *   link, the media stays in view below it, as Obsidian does for images.
  */
 function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'): Extension {
-	const find = (state: EditorState): EmbedMatch[] => {
+	/** Embeds in `from`–`to` of the document (whole lines). */
+	const scan = (state: EditorState, from: number, to: number): EmbedMatch[] => {
 		const matches: EmbedMatch[] = [];
-		const text = state.doc.toString();
+		const text = state.sliceDoc(from, to);
 		if (!text.includes('![[')) return matches;
 		for (const match of text.matchAll(EMBED)) {
-			const from = match.index ?? 0;
-			matches.push({ from, to: from + match[0].length, target: match[1]?.trim() ?? '', alias: match[2]?.trim() });
+			const start = from + (match.index ?? 0);
+			matches.push({ from: start, to: start + match[0].length, target: match[1]?.trim() ?? '', alias: match[2]?.trim() });
 		}
 		return matches;
+	};
+	const find = (state: EditorState): EmbedMatch[] => scan(state, 0, state.doc.length);
+	/**
+	 * After an edit: rescan only the lines it touched and move the rest, so
+	 * typing in a long note doesn't read the whole note each keystroke.
+	 */
+	const refind = (tr: Transaction, before: EmbedMatch[]): EmbedMatch[] => {
+		const { state, changes } = tr;
+		const touched: [number, number][] = [];
+		changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+			touched.push([state.doc.lineAt(fromB).from, state.doc.lineAt(toB).to]);
+		});
+		const inTouched = (pos: number): boolean => touched.some(([from, to]) => pos >= from && pos <= to);
+		const kept: EmbedMatch[] = [];
+		for (const match of before) {
+			if (changes.touchesRange(match.from, match.to)) continue;
+			const moved = { ...match, from: changes.mapPos(match.from), to: changes.mapPos(match.to) };
+			if (!inTouched(moved.from)) kept.push(moved);
+		}
+		for (const [from, to] of touched) kept.push(...scan(state, from, to));
+		// Overlapping touched lines can find the same embed twice.
+		kept.sort((a, b) => a.from - b.from);
+		return kept.filter((match, i) => i === 0 || match.from !== kept[i - 1]?.from);
 	};
 	const touching = (state: EditorState, { from, to }: EmbedMatch): boolean =>
 		state.selection.ranges.some((range) => range.from <= to && range.to >= from);
@@ -156,8 +180,9 @@ function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'):
 		const editing = new Set<number>();
 		const main = state.selection.main;
 		for (const match of matches) {
-			// The link text inside ![[ and ]], as Edit this block selects it.
-			const selectsText = main.from === match.from + 3 && main.to === match.to - 2;
+			// Edit this block selects the link text from just after ![[ (only
+			// the path when the link has a size or caption).
+			const selectsText = main.from === match.from + 3 && main.to > main.from && main.to <= match.to - 2;
 			if (selectsText || (before.has(match.from) && touching(state, match))) editing.add(match.from);
 		}
 		return editing;
@@ -197,7 +222,7 @@ function livePreviewEmbeds(embeds: MediaNoteEmbeds, mode: 'replace' | 'reveal'):
 		update: (value, tr) => {
 			const modeChanged = tr.startState.field(editorLivePreviewField) !== tr.state.field(editorLivePreviewField);
 			if (!tr.docChanged && !tr.selection && !modeChanged) return value;
-			const matches = tr.docChanged ? find(tr.state) : value.matches;
+			const matches = tr.docChanged ? refind(tr, value.matches) : value.matches;
 			// Positions move with typing; carry the edited embeds along.
 			const before = tr.docChanged
 				? new Set([...value.editing].map((pos) => tr.changes.mapPos(pos)))
