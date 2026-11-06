@@ -324,7 +324,11 @@ video.bases-gallery-zoom-media {
 	--bases-gallery-chip-inset: var(--size-4-2);
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
 	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
-	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, white 35%, transparent);
+	/* The tile edge's hairline: --mono-100 is dark in light themes, light in dark ones. */
+	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, var(--mono-100) 10%, transparent);
+	/* Properties panel beside a zoomed photo or video. */
+	--bases-gallery-details-width: 288px;
+	--bases-gallery-details-gap: var(--size-4-4);
 	/* Obsidian's pill radius. On macOS Obsidian draws buttons as squircles
 	   (--button-corner-shape); chips stay round, like tags and pills. */
 	--bases-gallery-chip-radius: var(--pill-radius, 2em);
@@ -398,4 +402,116 @@ video.bases-gallery-zoom-media {
 .bases-gallery-tile.is-playing .bases-gallery-duration {
 	opacity: 0;
 	transition-duration: var(--bases-gallery-preview-fade-in);
+}
+
+/*
+ * Info button and properties panel in the zoom. The button sits in the
+ * media's top-right corner and shows while the pointer is on the media;
+ * switched on, it stays (accent fill) and the panel shows the note's
+ * visible properties, laid out like a Bases card.
+ */
+.bases-gallery-zoom-box .bases-gallery-zoom-info {
+	--button-corner-shape: round;
+
+	position: absolute;
+	top: var(--bases-gallery-chip-inset);
+	right: var(--bases-gallery-chip-inset);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--bases-gallery-chip-size);
+	height: var(--bases-gallery-chip-size);
+	padding: 0;
+	border-radius: var(--bases-gallery-chip-radius);
+	background: var(--bases-gallery-chip-fill);
+	box-shadow: var(--bases-gallery-chip-ring);
+	color: white;
+	cursor: pointer;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+}
+
+.bases-gallery-zoom-box .bases-gallery-zoom-info:hover {
+	background: var(--bases-gallery-chip-fill-hover);
+}
+
+.bases-gallery-zoom-box .bases-gallery-zoom-info.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.bases-gallery-zoom-info svg {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.bases-gallery-zoom-stage.is-ready:not(.is-idle) .bases-gallery-zoom-box:hover .bases-gallery-zoom-info,
+.bases-gallery-zoom-stage.is-ready .bases-gallery-zoom-info.is-active {
+	opacity: 1;
+	pointer-events: auto;
+	transition-duration: var(--bases-gallery-preview-fade-in);
+}
+
+.bases-gallery-details {
+	position: fixed;
+	top: var(--frame-top);
+	left: calc(var(--frame-left) + var(--frame-width) + var(--bases-gallery-details-gap));
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	width: var(--bases-gallery-details-width);
+	max-height: var(--frame-height);
+	overflow-y: auto;
+	padding: var(--size-4-2) 0;
+	border-radius: var(--bases-cards-radius, var(--radius-m));
+	background: var(--bases-cards-background, var(--background-primary));
+	box-shadow: var(--bases-cards-shadow);
+	color: var(--text-normal);
+	cursor: auto;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--bases-gallery-preview-fade-out) linear;
+}
+
+/* No room beside the media: over its right edge, under the info button. */
+.bases-gallery-details.is-over {
+	top: calc(var(--frame-top) + 2 * var(--bases-gallery-chip-inset) + var(--bases-gallery-chip-size));
+	left: calc(var(--frame-left) + var(--frame-width) - var(--bases-gallery-details-width) - var(--bases-gallery-chip-inset));
+	max-height: calc(var(--frame-height) - 3 * var(--bases-gallery-chip-inset) - 2 * var(--bases-gallery-chip-size));
+}
+
+.bases-gallery-zoom-stage.is-ready.has-details .bases-gallery-details {
+	opacity: 1;
+	pointer-events: auto;
+	transition-duration: var(--bases-gallery-preview-fade-in);
+}
+
+/* The Cards view's property layout: a muted label over the value, the first property as the title. */
+.bases-gallery-detail-label {
+	padding: 0 var(--size-4-2);
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.bases-gallery-detail-value {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	min-height: var(--bases-cards-line-height, var(--size-4-6));
+	padding: 0 var(--size-4-2);
+	overflow-wrap: anywhere;
+}
+
+.bases-gallery-detail-value:empty::before {
+	content: "\2014";
+	color: var(--text-faint);
+}
+
+.bases-gallery-detail.is-title .bases-gallery-detail-value {
+	font-size: var(--font-ui-medium);
+	font-weight: calc(var(--font-weight) + var(--bold-modifier));
 }

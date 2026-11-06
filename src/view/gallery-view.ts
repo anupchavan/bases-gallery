@@ -1,4 +1,4 @@
-import { BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
+import { BasesEntry, BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
 import type BasesGalleryPlugin from '../main';
 import { FillZoom } from '../zoom/fill';
 import { HoverPreview } from '../video/hover-preview';
@@ -12,6 +12,7 @@ import { mosaic } from '../layout/mosaic';
 import { MediaSource, resolveEntryMedia } from '../media/resolve';
 import { GalleryConfig, parseSizeWeight, readGalleryConfig } from './options';
 import { Tile } from './tile';
+import { renderDetails } from './details';
 
 export const GALLERY_VIEW_TYPE = 'gallery';
 
@@ -47,6 +48,7 @@ interface Item {
 	/** Area this tile aims for, as a multiple of a medium tile. */
 	weight: number;
 	file: TFile;
+	entry: BasesEntry;
 }
 
 interface PlacedLayout {
@@ -219,6 +221,7 @@ export class GalleryView extends BasesView {
 				media,
 				weight,
 				file: entry.file,
+				entry,
 			});
 		}
 		this.settings = settings;
@@ -427,6 +430,7 @@ export class GalleryView extends BasesView {
 				shown: tile.image,
 				scroller: this.scrollers[0] ?? null,
 				takeVideo: () => this.preview?.handOff(el) ?? null,
+				details: (detailsEl) => renderDetails(this.app, this.config, item.entry, detailsEl),
 			},
 		);
 	}

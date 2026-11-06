@@ -1,4 +1,4 @@
-import { App, Component, Scope } from 'obsidian';
+import { App, Component, Scope, setIcon, setTooltip } from 'obsidian';
 import { MUTED_KEY, VideoControls } from '../video/player';
 
 /** medium-zoom's numbers, as measured on MUBI. */
@@ -33,6 +33,11 @@ export interface ZoomOptions {
 	 * on with. Called after the zoom has measured the page.
 	 */
 	takeVideo?: () => HTMLVideoElement | null;
+	/**
+	 * Renders the note's properties into the details panel. Returns false
+	 * when there are none to show (no info button then).
+	 */
+	details?: (el: HTMLElement) => boolean;
 }
 
 interface Rect {
@@ -69,6 +74,12 @@ export class FillZoom extends Component {
 	private wheelTimer = 0;
 	private refitTimer = 0;
 	private darkTimer = 0;
+	/** The info button's state; kept from one zoom to the next. */
+	private detailsOn = false;
+	private infoEl: HTMLElement | null = null;
+	private detailsEl: HTMLElement | null = null;
+	/** Room the details panel needs beside the media: its width plus two gaps. */
+	private detailsRoom = 0;
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
 
@@ -104,7 +115,10 @@ export class FillZoom extends Component {
 		// pass into the opening frame.
 		const { shown, scroller } = options;
 		const startScroll = scroller?.scrollTop ?? 0;
-		this.margin = parseFloat(tileEl.win.getComputedStyle(tileEl).getPropertyValue('--bases-gallery-zoom-margin')) || 0;
+		const tileStyle = tileEl.win.getComputedStyle(tileEl);
+		const px = (name: string): number => parseFloat(tileStyle.getPropertyValue(name)) || 0;
+		this.margin = px('--bases-gallery-zoom-margin');
+		this.detailsRoom = px('--bases-gallery-details-width') + 2 * px('--bases-gallery-details-gap');
 		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
 		const video = media.kind === 'video' ? (options.takeVideo?.() ?? null) : null;
@@ -162,15 +176,21 @@ export class FillZoom extends Component {
 			session.registerDomEvent(clone, 'click', () => this.close());
 			session.registerDomEvent(box.win, 'resize', () => this.close());
 		}
+		if (options.details) this.addDetails(session, stage, box, options.details);
 		session.registerDomEvent(overlay, 'click', () => this.close());
 		// In fullscreen the stage is all there is; a click beside the video closes.
 		session.registerDomEvent(stage, 'click', (evt) => {
 			if (evt.target === stage) this.close();
 		});
 		// Controls show once the box has arrived.
+		const ready = (): void => {
+			if (this.stageEl === stage && !this.closing) stage.addClass('is-ready');
+		};
 		session.registerDomEvent(box, 'transitionend', (evt) => {
-			if (evt.target === box && evt.propertyName === 'width' && !this.closing) stage.addClass('is-ready');
+			if (evt.target === box && evt.propertyName === 'width') ready();
 		});
+		// No transition runs with reduced motion or in a hidden window.
+		session.registerInterval(window.setTimeout(ready, DURATION_MS + 50));
 
 		this.fit();
 		// Let the start position paint, then switch on the open state so the
@@ -189,7 +209,8 @@ export class FillZoom extends Component {
 			// move the page just move the media with it.
 			let scrolled = 0;
 			const forward = (evt: WheelEvent): void => {
-				if (this.isFullscreen()) return;
+				// The details panel scrolls itself.
+				if (this.isFullscreen() || this.detailsEl?.contains(evt.target as Node)) return;
 				evt.preventDefault();
 				scroller.scrollTop += evt.deltaY;
 				scrolled += Math.abs(evt.deltaY);
@@ -294,13 +315,17 @@ export class FillZoom extends Component {
 		const scale = Math.min(capW / startW, capH / startH);
 		const width = startW * scale;
 		const height = startH * scale;
-		box.setCssProps({
+		// On the stage, so the details panel can line up with the media too.
+		stage.setCssProps({
 			'--frame-left': `${(viewW - width) / 2}px`,
 			'--frame-top': `${(viewH - height) / 2}px`,
 			'--frame-width': `${width}px`,
 			'--frame-height': `${height}px`,
 			'--zoom-start-scale': `${startW / width}`,
 		});
+		// Beside the media when the window has room on its right; otherwise
+		// over the media, under the info button.
+		this.detailsEl?.toggleClass('is-over', viewW - (viewW + width) / 2 < this.detailsRoom);
 	}
 
 	/** Fits again at once, with the size transitions off until it has painted. */
@@ -319,6 +344,45 @@ export class FillZoom extends Component {
 			// in again. Fading while macOS still animates the window shows grey.
 			if (!this.isFullscreen() && !this.darkTimer) this.setDark(false);
 		}, REFIT_SETTLE_MS);
+	}
+
+	/**
+	 * The info button sits in the media's top-right corner. It shows while
+	 * the pointer is on the media; switched on, it stays, and the note's
+	 * properties show beside the media (or over it when there is no room).
+	 */
+	private addDetails(session: Component, stage: HTMLElement, box: HTMLElement, render: (el: HTMLElement) => boolean): void {
+		const panel = stage.createDiv('bases-gallery-details');
+		if (!render(panel)) {
+			panel.detach();
+			return;
+		}
+		const info = box.createEl('button', { cls: 'bases-gallery-zoom-info', attr: { type: 'button' } });
+		setIcon(info, 'info');
+		setTooltip(info, 'Properties (i)', { placement: 'left' });
+		this.infoEl = info;
+		this.detailsEl = panel;
+		this.showDetails(this.detailsOn);
+		session.registerDomEvent(info, 'click', (evt) => {
+			// The media's own click would close the zoom or pause the video.
+			evt.stopPropagation();
+			this.showDetails(!this.detailsOn);
+		});
+		session.registerDomEvent(panel, 'click', (evt) => {
+			// Following a link leaves the gallery, so close the zoom behind it.
+			if (evt.target instanceof Element && evt.target.closest('a')) this.close();
+		});
+		this.scope?.register([], 'i', () => {
+			this.showDetails(!this.detailsOn);
+			return false;
+		});
+	}
+
+	private showDetails(on: boolean): void {
+		this.detailsOn = on;
+		this.infoEl?.toggleClass('is-active', on);
+		this.infoEl?.setAttr('aria-pressed', String(on));
+		this.stageEl?.toggleClass('has-details', on);
 	}
 
 	private isFullscreen(): boolean {
@@ -372,6 +436,8 @@ export class FillZoom extends Component {
 		this.stageEl = null;
 		this.cloneEl = null;
 		this.boxEl = null;
+		this.infoEl = null;
+		this.detailsEl = null;
 		this.sourceEl = null;
 		this.base = null;
 		this.closing = false;
