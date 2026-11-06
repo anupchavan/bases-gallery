@@ -91,6 +91,8 @@
 /* Fill on click: medium-zoom's timing (300 ms, cubic-bezier(.2,0,.2,1)). */
 .bases-gallery-zoom-overlay {
 	--bases-gallery-zoom-duration: 300ms;
+	/* Space kept above and below a filled image. */
+	--bases-gallery-zoom-margin: var(--size-4-6);
 
 	position: fixed;
 	inset: 0;

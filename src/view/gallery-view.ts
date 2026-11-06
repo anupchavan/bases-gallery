@@ -372,7 +372,7 @@ export class GalleryView extends BasesView {
 			return;
 		}
 		const image = tile.image;
-		if (item.media.kind === 'image' && image) this.zoom?.open(image);
+		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null);
 	}
 
 	/** Coalesces all work into one animation frame. */

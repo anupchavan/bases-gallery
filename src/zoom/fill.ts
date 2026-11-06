@@ -37,7 +37,12 @@ export class FillZoom extends Component {
 		this.cleanUp();
 	}
 
-	open(source: HTMLImageElement): void {
+	/**
+	 * Opens the zoom. `scroller` is the pane the gallery scrolls in: wheel
+	 * input keeps scrolling it underneath, and the image moves with the page
+	 * until the zoom closes, as on MUBI.
+	 */
+	open(source: HTMLImageElement, scroller: HTMLElement | null): void {
 		if (this.isOpen || !source.isConnected || source.naturalWidth === 0) return;
 		const doc = source.doc;
 		const win = source.win;
@@ -61,11 +66,14 @@ export class FillZoom extends Component {
 		this.sourceEl = source;
 		this.closing = false;
 
-		// Same transform maths as medium-zoom (margin 0, no larger than natural size).
+		// medium-zoom's transform maths (never larger than natural size), with
+		// a vertical margin so the image doesn't touch the window's edges.
+		const margin = parseFloat(win.getComputedStyle(overlay).getPropertyValue('--bases-gallery-zoom-margin')) || 0;
 		const viewW = doc.documentElement.clientWidth;
 		const viewH = doc.documentElement.clientHeight;
+		const roomH = Math.max(1, viewH - 2 * margin);
 		const scaleX = Math.min(Math.max(rect.width, source.naturalWidth), viewW) / rect.width;
-		const scaleY = Math.min(Math.max(rect.height, source.naturalHeight), viewH) / rect.height;
+		const scaleY = Math.min(Math.max(rect.height, source.naturalHeight), roomH) / rect.height;
 		const scale = Math.min(scaleX, scaleY);
 		const dx = ((viewW - rect.width) / 2 - rect.left) / scale;
 		const dy = ((viewH - rect.height) / 2 - rect.top) / scale;
@@ -85,8 +93,23 @@ export class FillZoom extends Component {
 		session.registerDomEvent(overlay, 'click', close);
 		session.registerDomEvent(clone, 'click', close);
 		session.registerDomEvent(win, 'resize', close);
-		session.registerDomEvent(overlay, 'wheel', (evt) => this.onWheel(evt), { passive: true });
-		session.registerDomEvent(clone, 'wheel', (evt) => this.onWheel(evt), { passive: true });
+		// Wheel input scrolls the pane underneath; the image rides along with
+		// the page (its start position follows the scroll), then the zoom
+		// closes after 40 px, back onto the tile wherever it now is.
+		if (scroller) {
+			const startScroll = scroller.scrollTop;
+			const forward = (evt: WheelEvent): void => {
+				evt.preventDefault();
+				scroller.scrollTop += evt.deltaY;
+			};
+			session.registerDomEvent(overlay, 'wheel', forward, { passive: false });
+			session.registerDomEvent(clone, 'wheel', forward, { passive: false });
+			session.registerDomEvent(scroller, 'scroll', () => {
+				const moved = scroller.scrollTop - startScroll;
+				clone.setCssProps({ '--zoom-top': `${rect.top - moved}px` });
+				this.onScrolled(Math.abs(moved));
+			});
+		}
 
 		this.scope = new Scope(this.app.scope);
 		this.scope.register([], 'Escape', () => {
@@ -116,8 +139,8 @@ export class FillZoom extends Component {
 		window.setTimeout(finish, DURATION_MS + 50);
 	}
 
-	private onWheel(evt: WheelEvent): void {
-		this.wheelTotal += Math.abs(evt.deltaY);
+	private onScrolled(distance: number): void {
+		this.wheelTotal = distance;
 		if (this.wheelTotal > SCROLL_CLOSE_PX && !this.wheelTimer) {
 			this.wheelTimer = window.setTimeout(() => this.close(), SCROLL_CLOSE_DELAY_MS);
 		}
