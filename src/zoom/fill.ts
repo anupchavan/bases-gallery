@@ -242,6 +242,7 @@ export class FillZoom extends Component {
 			session.registerDomEvent(box.win, 'resize', () => this.close());
 		}
 		if (options.details) this.addDetails(session, stage, options.details);
+		this.trackPointer(session, stage, box);
 		session.registerDomEvent(overlay, 'click', () => this.close());
 		// In fullscreen the stage is all there is; a click beside the video closes.
 		session.registerDomEvent(stage, 'click', (evt) => {
@@ -509,6 +510,7 @@ export class FillZoom extends Component {
 			}, PEEK_GRACE_MS);
 		};
 		session.register(() => this.win.clearTimeout(leaveTimer));
+		this.trackPointer(session, stage, info, panel);
 		for (const el of [info, panel]) {
 			session.registerDomEvent(el, 'pointerenter', enter);
 			session.registerDomEvent(el, 'pointerleave', leave);
@@ -532,6 +534,24 @@ export class FillZoom extends Component {
 			this.showDetails(!this.detailsOn);
 			return false;
 		});
+	}
+
+	/**
+	 * Marks the stage `is-pointer-in` while the pointer is on the media, the
+	 * info button or the card, so CSS can show the button (without `:has`,
+	 * which the plugin review flags as slow).
+	 */
+	private trackPointer(session: Component, stage: HTMLElement, ...els: HTMLElement[]): void {
+		const inside = (target: EventTarget | null): boolean =>
+			target !== null &&
+			'nodeType' in target &&
+			[this.boxEl, this.infoEl, this.detailsEl].some((el) => el?.contains(target as Node));
+		for (const el of els) {
+			session.registerDomEvent(el, 'pointerenter', () => stage.addClass('is-pointer-in'));
+			session.registerDomEvent(el, 'pointerleave', (evt) => {
+				if (!inside(evt.relatedTarget)) stage.removeClass('is-pointer-in');
+			});
+		}
 	}
 
 	private showDetails(on: boolean): void {
@@ -590,7 +610,7 @@ export class FillZoom extends Component {
 		if (!overlay || !stage) return null;
 		this.releaseMedia();
 		stage.empty();
-		stage.removeClass('is-ready', 'is-peeking', 'is-idle', 'has-details');
+		stage.removeClass('is-ready', 'is-peeking', 'is-idle', 'has-details', 'is-pointer-in');
 		stage.setCssProps({ '--zoom-ride': '0px' });
 		return { overlay, stage };
 	}

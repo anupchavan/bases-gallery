@@ -538,7 +538,8 @@ export class GalleryView extends BasesView {
 
 	private observeResize(): void {
 		this.resizeObserver?.disconnect();
-		const win = this.rootEl.win as Window & typeof globalThis;
+		// The view's own window, whose observer runs on that window's frames.
+		const win = this.rootEl.win as Window & { ResizeObserver: typeof ResizeObserver };
 		const observer = new win.ResizeObserver(() => {
 			const width = this.sizerEl.clientWidth;
 			// A hidden tab or collapsed pane has no width: lay out when it shows.

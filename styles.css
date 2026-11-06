@@ -529,7 +529,7 @@ body {
 	opacity: 0;
 }
 
-.media-manager-zoom-stage.is-ready:not(.is-idle):has(.media-manager-zoom-box:hover, .media-manager-zoom-info:hover, .media-manager-details:hover) .media-manager-zoom-info,
+.media-manager-zoom-stage.is-ready.is-pointer-in:not(.is-idle) .media-manager-zoom-info,
 .media-manager-zoom-stage.is-ready.has-details .media-manager-zoom-info,
 .media-manager-zoom-stage.is-ready.is-peeking .media-manager-zoom-info {
 	opacity: 1;

@@ -4,6 +4,11 @@ export default {
 	plugins: ['stylelint-no-unsupported-browser-features'],
 	rules: {
 		'plugin/no-unsupported-browser-features': [true, { browsers: ['chrome 132'], severity: 'warning' }],
+		// The plugin review flags :has for its broad selector invalidation.
+		'selector-pseudo-class-disallowed-list': [
+			['has'],
+			{ message: 'Avoid :has: it can cause significant performance issues. Toggle a class from code instead.' },
+		],
 		'declaration-no-important': [
 			true,
 			{
