@@ -35,6 +35,8 @@ export interface MosaicOptions {
 	maxCropPerSide: number;
 	/** Only single tiles per block: plain justified rows. */
 	singlesOnly?: boolean;
+	/** No tile in a block may be shorter or narrower than this, in px. */
+	minTileSize?: number;
 }
 
 export interface MosaicLayout {
@@ -134,6 +136,8 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
 	const size = (i: number): number => clamp(Math.round(items[i]?.size ?? 1), 0, 2);
 
+	const minTile = Math.max(0, options.minTileSize ?? 0);
+	const scratch: Box[] = new Array<Box>(n);
 	// Per position and template: the block's width line and its size cost.
 	const blockA: Float64Array[] = [];
 	const blockB: Float64Array[] = [];
@@ -150,6 +154,15 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 				a[i] = lin.a;
 				b[i] = lin.b;
 				let cost = template.penalty;
+				// Legibility: try the block at the lowest row height and most cropping it could get.
+				if (template.count > 1 && minTile > 0) {
+					const blockWidth = (lin.a * minHeight - lin.b) * minStretch;
+					place(template.tree, i, { x: 0, y: 0, width: blockWidth, height: minHeight }, ratio, gap, scratch);
+					for (let leaf = 0; leaf < template.count; leaf++) {
+						const box = scratch[i + leaf];
+						if (!box || box.height < minTile || box.width < minTile) cost = INFEASIBLE;
+					}
+				}
 				for (let leaf = 0; leaf < template.count; leaf++) {
 					cost += sizeCost(size(i + leaf), depths[leaf] ?? 0);
 				}

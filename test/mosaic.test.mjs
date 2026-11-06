@@ -106,3 +106,14 @@ test('large tiles become features, small ones never do', () => {
 	assert.ok(!featured.includes(0), 'no small tile is featured');
 	assert.ok(featured.filter((s) => s === 2).length >= 3, `features: ${featured}`);
 });
+
+test('no tile in a block is smaller than the legibility floor', () => {
+	const items = Array.from({ length: 300 }, () => ({ ratio: photoRatios[Math.floor(rand() * 10)], size: rand() < 0.3 ? 0 : 1 }));
+	const { boxes } = mosaic(items, { ...base, minTileSize: 120 });
+	// Stacked tiles keep both sides above the floor; a lone tall portrait may
+	// be narrower, but never shorter or smaller in area.
+	const shortest = Math.min(...boxes.map((b) => b.height));
+	const smallestArea = Math.min(...boxes.map((b) => b.width * b.height));
+	assert.ok(shortest >= 120 - 0.5, `shortest tile ${shortest}`);
+	assert.ok(smallestArea >= 120 * 120, `smallest area ${smallestArea}`);
+});

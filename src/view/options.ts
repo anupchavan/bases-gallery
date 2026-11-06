@@ -4,10 +4,12 @@ export const DEFAULT_TILE_SIZE = 240;
 export const DEFAULT_MAX_CROP = 10;
 
 export type GalleryLayoutKind = 'mosaic' | 'rows';
+export type SizeSource = 'connections' | 'property' | 'none';
 
 export interface GalleryConfig {
 	layout: GalleryLayoutKind;
 	mediaProperty: BasesPropertyId | null;
+	sizeBy: SizeSource;
 	sizeProperty: BasesPropertyId | null;
 	/** Mosaic: edge of a medium tile. Rows: row height. In px. */
 	tileSize: number;
@@ -32,11 +34,23 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 			filter: (prop) => prop === 'file.file' || !prop.startsWith('file.'),
 		},
 		{
+			type: 'dropdown',
+			key: 'sizeBy',
+			displayName: 'Tile size from',
+			default: 'connections',
+			options: {
+				connections: 'Links to the note',
+				property: 'A property',
+				none: 'Nothing (all equal)',
+			},
+			shouldHide: () => config.get('layout') === 'rows',
+		},
+		{
 			type: 'property',
 			key: 'sizeProperty',
 			displayName: 'Size property',
 			filter: (prop) => !prop.startsWith('file.'),
-			shouldHide: () => config.get('layout') === 'rows',
+			shouldHide: () => config.get('layout') === 'rows' || config.get('sizeBy') !== 'property',
 		},
 		{
 			type: 'slider',
@@ -63,6 +77,7 @@ export function readGalleryConfig(config: BasesViewConfig): GalleryConfig {
 	return {
 		layout: config.get('layout') === 'rows' ? 'rows' : 'mosaic',
 		mediaProperty: config.getAsPropertyId('mediaProperty'),
+		sizeBy: readSizeSource(config.get('sizeBy')),
 		sizeProperty: config.getAsPropertyId('sizeProperty'),
 		tileSize: readNumber(config.get('tileSize'), DEFAULT_TILE_SIZE),
 		maxCropPerSide: readNumber(config.get('maxCrop'), DEFAULT_MAX_CROP) / 100,
@@ -78,6 +93,10 @@ export function parseSize(text: string): number {
 	if (value === 'small' || value === 's' || value === '1') return 0;
 	if (value === 'large' || value === 'l' || value === '3') return 2;
 	return 1;
+}
+
+function readSizeSource(value: unknown): SizeSource {
+	return value === 'property' || value === 'none' ? value : 'connections';
 }
 
 function readNumber(value: unknown, fallback: number): number {

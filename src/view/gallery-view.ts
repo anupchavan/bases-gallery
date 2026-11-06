@@ -1,5 +1,6 @@
 import { BasesView, QueryController, debounce } from 'obsidian';
 import type { Size } from '../media/dimensions';
+import { connections, incomingLinkCounts, sizesFromConnections } from '../media/importance';
 import { probeSize } from '../media/probe';
 import { loadSizes, saveSizes } from '../media/size-cache';
 import { Box, justify } from '../layout/justify';
@@ -22,6 +23,9 @@ const FIRST_PAINT_WAIT_MS = 250;
 const FIRST_PAINT_ITEMS = 40;
 /** Mosaic rows are taller than the tile size because they hold stacked pairs. */
 const MOSAIC_ROW_SCALE = 1.5;
+/** Legibility floor for tiles inside blocks: px, and share of the tile size. */
+const MIN_TILE_PX = 88;
+const MIN_TILE_SHARE = 0.4;
 /** A layout slower than this waits for window resizes to settle. */
 const SLOW_LAYOUT_MS = 8;
 const RESIZE_SETTLE_MS = 150;
@@ -31,6 +35,7 @@ interface Item {
 	media: MediaSource;
 	/** 0 small, 1 medium, 2 large. */
 	size: number;
+	notePath: string;
 }
 
 interface PlacedLayout {
@@ -109,6 +114,12 @@ export class GalleryView extends BasesView {
 		this.registerEvent(
 			this.app.workspace.on('css-change', () => this.requestUpdate(true)),
 		);
+		// Links change as notes are edited; sizes follow, at most once a second.
+		this.registerEvent(
+			this.app.metadataCache.on('resolved', () => {
+				if (this.settings?.sizeBy === 'connections') this.refreshConnections();
+			}),
+		);
 
 		this.bindScroll();
 		this.register(this.rootEl.onWindowMigrated(() => this.bindScroll()));
@@ -123,6 +134,7 @@ export class GalleryView extends BasesView {
 		this.probeQueue = [];
 		this.flushSaves.run();
 		this.settleResize.cancel();
+		this.refreshConnections.cancel();
 		for (const tile of this.mounted.values()) tile.release();
 		this.mounted.clear();
 		this.pool.length = 0;
@@ -135,16 +147,55 @@ export class GalleryView extends BasesView {
 			const media = resolveEntryMedia(this.app, entry, settings.mediaProperty);
 			if (!media) continue;
 			let size = 1;
-			if (settings.sizeProperty) {
+			if (settings.sizeBy === 'property' && settings.sizeProperty) {
 				const value = entry.getValue(settings.sizeProperty);
 				if (value?.isTruthy()) size = parseSize(value.toString());
 			}
-			items.push({ key: `${entry.file.path}\n${media.src}`, media, size });
+			items.push({
+				key: `${entry.file.path}\n${media.src}`,
+				media,
+				size,
+				notePath: entry.file.path,
+			});
 		}
 		this.settings = settings;
 		this.items = items;
+		if (settings.sizeBy === 'connections') this.applyConnectionSizes();
 		this.updateEmptyState(settings);
 		void this.ensureSizes();
+	}
+
+	private linkCounts: Map<string, number> | null = null;
+	private readonly refreshConnections = debounce(
+		() => {
+			this.linkCounts = null;
+			if (this.applyConnectionSizes()) this.requestUpdate(true);
+		},
+		1000,
+		true,
+	);
+
+	/** Sizes tiles by how many files link to their note or media. Returns true if any changed. */
+	private applyConnectionSizes(): boolean {
+		const resolved = this.app.metadataCache.resolvedLinks;
+		this.linkCounts ??= incomingLinkCounts(resolved);
+		const counts = this.linkCounts;
+		const values = this.items.map((item) => {
+			const mediaPath = item.media.file?.path ?? null;
+			const notePath = item.notePath;
+			const linksToMedia = mediaPath !== null && (resolved[notePath]?.[mediaPath] ?? 0) > 0;
+			return connections(counts, notePath, mediaPath, linksToMedia);
+		});
+		const sizes = sizesFromConnections(values);
+		let changed = false;
+		this.items.forEach((item, i) => {
+			const size = sizes[i] ?? 1;
+			if (item.size !== size) {
+				item.size = size;
+				changed = true;
+			}
+		});
+		return changed;
 	}
 
 	/** Loads cached sizes once, then reads the sizes still missing, in display order. */
@@ -257,6 +308,7 @@ export class GalleryView extends BasesView {
 						{
 							width: this.layoutWidth,
 							rowHeight: settings.tileSize * MOSAIC_ROW_SCALE,
+							minTileSize: Math.max(MIN_TILE_PX, settings.tileSize * MIN_TILE_SHARE),
 							gap: this.gap,
 							maxCropPerSide: settings.maxCropPerSide,
 						},
