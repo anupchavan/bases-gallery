@@ -21,8 +21,8 @@ const PROBE_CONCURRENCY = 6;
 /** On a first visit, wait this long for the first screenful of sizes before drawing. */
 const FIRST_PAINT_WAIT_MS = 250;
 const FIRST_PAINT_ITEMS = 40;
-/** Mosaic rows are taller than the tile size because they hold stacked pairs. */
-const MOSAIC_ROW_SCALE = 1.5;
+/** Mosaic bands are about two tiles tall: most hold stacked tiles, some one big tile. */
+const MOSAIC_ROW_SCALE = 2.2;
 /** Legibility floor for tiles inside blocks: px, and share of the tile size. */
 const MIN_TILE_PX = 88;
 const MIN_TILE_SHARE = 0.4;

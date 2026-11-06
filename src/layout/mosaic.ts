@@ -52,11 +52,12 @@ type Tree = number | { dir: 'h' | 'v'; children: Tree[] };
 
 /** Block templates. Leaf numbers are offsets into the block's tiles. */
 const TEMPLATES: { tree: Tree; count: number; penalty: number }[] = [
-	{ tree: 0, count: 1, penalty: 0 },
-	{ tree: { dir: 'v', children: [0, 1] }, count: 2, penalty: 0.02 },
-	{ tree: { dir: 'v', children: [0, 1, 2] }, count: 3, penalty: 0.08 },
-	{ tree: { dir: 'v', children: [{ dir: 'h', children: [0, 1] }, 2] }, count: 3, penalty: 0.06 },
-	{ tree: { dir: 'v', children: [0, { dir: 'h', children: [1, 2] }] }, count: 3, penalty: 0.06 },
+	// A lone tile fills the band's full height: one of the big tiles.
+	{ tree: 0, count: 1, penalty: 0.2 },
+	{ tree: { dir: 'v', children: [0, 1] }, count: 2, penalty: 0 },
+	{ tree: { dir: 'v', children: [0, 1, 2] }, count: 3, penalty: 0.03 },
+	{ tree: { dir: 'v', children: [{ dir: 'h', children: [0, 1] }, 2] }, count: 3, penalty: 0.02 },
+	{ tree: { dir: 'v', children: [0, { dir: 'h', children: [1, 2] }] }, count: 3, penalty: 0.02 },
 	{
 		tree: {
 			dir: 'v',
@@ -66,7 +67,7 @@ const TEMPLATES: { tree: Tree; count: number; penalty: number }[] = [
 			],
 		},
 		count: 4,
-		penalty: 0.1,
+		penalty: 0.04,
 	},
 ];
 
@@ -89,7 +90,8 @@ const FEATURE_MAX_SHARE = 0.7;
 const FEATURE_PENALTY = 0.05;
 /** Rhythm: at least this many plain rows between features, and a cost per row past the max. */
 const MIN_FEATURE_GAP = 2;
-const MAX_FEATURE_GAP = 4;
+const MAX_FEATURE_GAP = 6;
+const SAME_NEIGHBOUR_PENALTY = 0.1;
 const LATE_FEATURE_PENALTY = 0.25;
 const CADENCE_STATES = 6;
 
@@ -246,9 +248,13 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 		let cost = 0;
 		i = start + 1;
 		for (const len of lens) {
+			// Sub-rows aim for half a band, like the tiles in a stack of two.
 			const h = (column - (len - 1) * gap) / ratioSum(i, i + len);
-			if (h < minHeight || h > maxHeight) return INFEASIBLE;
-			cost += deviation(h, target);
+			if (h < minHeight / 2 || h > maxHeight / 2 || h < minTile) return INFEASIBLE;
+			for (let j = i; j < i + len; j++) {
+				if (ratio(j) * h * h < minTile * minTile) return INFEASIBLE;
+			}
+			cost += deviation(h, target / 2);
 			for (let j = i; j < i + len; j++) if (size(j) === 2) cost += 0.3;
 			i += len;
 		}
@@ -301,7 +307,12 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 						singles: path.singles + (t === 0 ? 1 : 0),
 						a: path.a + (blockA[t]?.[first] ?? 0),
 						b: path.b + (blockB[t]?.[first] ?? 0),
-						choiceCost: path.choiceCost + (blockCost[t]?.[first] ?? 0),
+						// Neighbouring columns that split the same way line their seams
+						// up, which reads as rows again.
+						choiceCost:
+							path.choiceCost +
+							(blockCost[t]?.[first] ?? 0) +
+							(t !== 0 && path.template === t ? SAME_NEIGHBOUR_PENALTY : 0),
 					});
 				}
 			}
@@ -505,18 +516,17 @@ function keep(byLength: Path[][], len: number, path: Path): void {
 
 /** Large tiles want to stand alone; small ones are happy deeper in a block. */
 function sizeCost(size: number, depth: number): number {
-	if (depth === 0) return size === 0 ? 0.06 : 0;
-	if (size === 2) return 0.5 * depth;
-	if (size === 0) return 0;
-	return 0.02 * depth;
+	if (depth === 0) {
+		if (size === 2) return -0.25;
+		if (size === 0) return 0.6;
+		return 0;
+	}
+	return size === 2 ? 0.5 * depth : 0;
 }
 
-/** Nudges rows away from being plain rows or all blocks. */
+/** A band of only full-height tiles is a plain row: the thing a mosaic avoids. */
 function variety(path: Path): number {
-	const k = path.blocks;
-	if (k <= 1) return 0;
-	if (path.singles === k || path.singles === 0) return 0.04;
-	return 0;
+	return path.blocks > 1 && path.singles === path.blocks ? 0.3 : 0;
 }
 
 function leafDepths(tree: Tree, count: number): number[] {
