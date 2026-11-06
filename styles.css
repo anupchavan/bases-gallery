@@ -99,6 +99,7 @@
 	--bases-gallery-zoom-duration: 300ms;
 	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
 	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
+	--bases-gallery-dark-fade: 150ms;
 
 	position: fixed;
 	inset: 0;
@@ -106,11 +107,19 @@
 	background: var(--background-primary);
 	opacity: 0;
 	cursor: zoom-out;
-	transition: opacity var(--bases-gallery-zoom-duration);
+	transition:
+		opacity var(--bases-gallery-zoom-duration),
+		background-color var(--bases-gallery-dark-fade);
 }
 
 .bases-gallery-zoom-overlay.is-open {
 	opacity: 1;
+}
+
+/* Fullscreen is black. The page goes black just before, so the window's
+   fade into fullscreen doesn't flash the light page. */
+.bases-gallery-zoom-overlay.is-dark {
+	background-color: black;
 }
 
 /* Holds the clone and the video controls; the part that goes fullscreen. */
@@ -139,7 +148,7 @@
 	cursor: zoom-out;
 	/* Scrolling the pane underneath moves the box with the page. */
 	transform: translateY(var(--zoom-ride, 0));
-	transition-property: top, left, width, height;
+	transition-property: top, left, width, height, border-radius;
 	transition-duration: 300ms;
 	transition-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -176,8 +185,11 @@ video.bases-gallery-zoom-media {
 	cursor: default;
 }
 
-.bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
+.bases-gallery-zoom-stage.is-dark .bases-gallery-zoom-box {
 	border-radius: 0;
+}
+
+.bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
 	transform: none;
 }
 

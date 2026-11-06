@@ -11,6 +11,8 @@ const SCROLL_CLOSE_DELAY_MS = 150;
  * into fullscreen over several resizes, and each one snaps.
  */
 const REFIT_SETTLE_MS = 400;
+/** Must match --bases-gallery-dark-fade: the fade to black before fullscreen. */
+const DARKEN_MS = 150;
 
 export interface ZoomMedia {
 	kind: 'image' | 'video';
@@ -61,6 +63,7 @@ export class FillZoom extends Component {
 	private closing = false;
 	private wheelTimer = 0;
 	private refitTimer = 0;
+	private darkTimer = 0;
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
 
@@ -298,8 +301,14 @@ export class FillZoom extends Component {
 		stage.addClass('is-refitting');
 		this.fit();
 		window.clearTimeout(this.refitTimer);
+		window.clearTimeout(this.darkTimer);
+		this.darkTimer = 0;
 		this.refitTimer = window.setTimeout(() => {
-			if (this.stageEl === stage) stage.removeClass('is-refitting');
+			if (this.stageEl !== stage) return;
+			stage.removeClass('is-refitting');
+			// Back from fullscreen and the window has settled: fade the page
+			// in again. Fading while macOS still animates the window shows grey.
+			if (!this.isFullscreen() && !this.darkTimer) this.setDark(false);
 		}, REFIT_SETTLE_MS);
 	}
 
@@ -307,11 +316,29 @@ export class FillZoom extends Component {
 		return this.stageEl !== null && this.stageEl.doc.fullscreenElement === this.stageEl;
 	}
 
+	/**
+	 * macOS cross-fades the window into and out of fullscreen. Going dark
+	 * first (black page, square corners) makes that fade black to black, so
+	 * the light page doesn't flash through it.
+	 */
 	private toggleFullscreen(): void {
 		const stage = this.stageEl;
-		if (!stage || this.closing) return;
-		if (this.isFullscreen()) void stage.doc.exitFullscreen();
-		else void stage.requestFullscreen().catch(() => {});
+		if (!stage || this.closing || this.darkTimer) return;
+		if (this.isFullscreen()) {
+			void stage.doc.exitFullscreen();
+			return;
+		}
+		this.setDark(true);
+		this.darkTimer = window.setTimeout(() => {
+			this.darkTimer = 0;
+			if (this.stageEl !== stage || this.closing) return;
+			stage.requestFullscreen().catch(() => this.setDark(false));
+		}, DARKEN_MS);
+	}
+
+	private setDark(dark: boolean): void {
+		this.stageEl?.toggleClass('is-dark', dark);
+		this.overlayEl?.toggleClass('is-dark', dark);
 	}
 
 	private cleanUp(): void {
