@@ -56,6 +56,8 @@ export class GalleryView extends BasesView {
 	private settings: GalleryConfig | null = null;
 	private layout: PlacedLayout | null = null;
 	private layoutWidth = 0;
+	private layoutPaneHeight = 0;
+	private resizeObserver: ResizeObserver | null = null;
 	private gap = 0;
 
 	/** Known aspect ratios by media URL. */
@@ -100,13 +102,15 @@ export class GalleryView extends BasesView {
 
 	onload(): void {
 		const resizeObserver = new ResizeObserver(() => {
-			if (this.sizerEl.clientWidth === this.layoutWidth) return;
+			const paneHeight = this.scrollers[0]?.clientHeight ?? 0;
+			if (this.sizerEl.clientWidth === this.layoutWidth && paneHeight === this.layoutPaneHeight) return;
 			// Like Google Photos: when a full layout is expensive, wait for the
 			// resize to settle instead of relaying out every frame.
 			if (this.lastLayoutMs > SLOW_LAYOUT_MS) this.settleResize();
 			else this.requestUpdate(true);
 		});
 		resizeObserver.observe(this.sizerEl);
+		this.resizeObserver = resizeObserver;
 		this.register(() => resizeObserver.disconnect());
 
 		this.registerEvent(
@@ -285,6 +289,7 @@ export class GalleryView extends BasesView {
 		const started = performance.now();
 
 		this.layoutWidth = this.sizerEl.clientWidth;
+		this.layoutPaneHeight = this.scrollers[0]?.clientHeight ?? 0;
 		this.gap = parseFloat(getComputedStyle(this.sizerEl).rowGap) || 0;
 		const fallback = this.typicalRatio();
 		const ratios = this.items.map(
@@ -295,6 +300,7 @@ export class GalleryView extends BasesView {
 				? justify(ratios, {
 						width: this.layoutWidth,
 						targetHeight: settings.tileSize,
+						maxHeight: this.maxTileHeight(),
 						gap: this.gap,
 						maxCropPerSide: settings.maxCropPerSide,
 					}).boxes
@@ -307,6 +313,7 @@ export class GalleryView extends BasesView {
 							width: this.layoutWidth,
 							tileSize: settings.tileSize,
 							minTileSize: Math.max(MIN_TILE_PX, settings.tileSize * MIN_TILE_SHARE),
+							maxTileHeight: this.maxTileHeight(),
 							gap: this.gap,
 						},
 					).boxes;
@@ -380,6 +387,15 @@ export class GalleryView extends BasesView {
 		return values[values.length >> 1] ?? FALLBACK_RATIO;
 	}
 
+	/** The tallest a tile may be: the visible height of the pane it scrolls in. */
+	private maxTileHeight(): number {
+		const scroller = this.scrollers[0];
+		const visible = scroller ? scroller.clientHeight : this.rootEl.win.innerHeight;
+		const style = getComputedStyle(this.rootEl);
+		const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+		return Math.max(MIN_TILE_PX, visible - padding);
+	}
+
 	/** The part of the sizer inside the viewport and every scrolling ancestor, in sizer px. */
 	private visibleRange(): { top: number; bottom: number } {
 		const rect = this.sizerEl.getBoundingClientRect();
@@ -426,6 +442,8 @@ export class GalleryView extends BasesView {
 
 		const win = this.rootEl.win;
 		this.scrollers = scrollingAncestors(this.rootEl);
+		const pane = this.scrollers[0];
+		if (pane) this.resizeObserver?.observe(pane);
 		const onScroll = (evt: Event): void => {
 			const target = evt.target;
 			if (target instanceof Node && target.contains(this.rootEl)) {

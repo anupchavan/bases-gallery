@@ -22,6 +22,8 @@ export interface JustifyOptions {
 	heightTolerance?: number;
 	/** Most tiles one row may hold. */
 	maxRowItems?: number;
+	/** No row may be taller than this, in px. */
+	maxHeight?: number;
 }
 
 export interface Box {
@@ -77,7 +79,7 @@ export function justify(
 	const minStretch = 1 - 2 * crop;
 	const maxStretch = 1 / minStretch;
 	const minHeight = target * (1 - tolerance);
-	const maxHeight = target * (1 + tolerance);
+	const maxHeight = Math.min(target * (1 + tolerance), options.maxHeight ?? Infinity);
 
 	const scratch: RowFit = { cost: 0, height: 0, stretch: 1, ragged: false };
 	const set = (

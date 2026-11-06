@@ -33,6 +33,8 @@ export interface MosaicOptions {
 	gap: number;
 	/** No tile may be shorter than this, nor smaller in area than its square, in px. */
 	minTileSize?: number;
+	/** No band (so no tile) may be taller than this, in px: the visible pane's height. */
+	maxTileHeight?: number;
 }
 
 export interface MosaicLayout {
@@ -215,7 +217,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 	const tile = Math.max(16, options.tileSize);
 	const minTile = Math.max(0, options.minTileSize ?? 0);
 	const minBand = tile * MIN_BAND;
-	const maxBand = tile * MAX_BAND;
+	const maxBand = Math.max(minBand, Math.min(tile * MAX_BAND, options.maxTileHeight ?? Infinity));
 
 	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
 	const target = new Float64Array(n);
@@ -400,8 +402,14 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 	for (const { start, path, end } of bands) {
 		const fit = bandFit(path, start, end === n);
 		const natural = (width - gap * (path.columns - 1) + path.b) / path.a;
-		// The fallback (nothing else fit) keeps the full width so there are no holes.
-		const height = fit.cost >= INFEASIBLE ? natural : fit.height;
+		// The fallback (nothing else fit) keeps the full width so there are no
+		// holes, unless that would be taller than the pane allows.
+		let height = fit.cost >= INFEASIBLE ? natural : fit.height;
+		let ragged = fit.ragged;
+		if (height > maxBand) {
+			height = maxBand;
+			ragged = true;
+		}
 		const columns = columnsOf(path);
 		let x = 0;
 		let i = start;
@@ -409,7 +417,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 			const shape = COLUMNS[c];
 			if (!shape) return;
 			let w = (colA[c]?.[i] ?? 1) * height - (colB[c]?.[i] ?? 0);
-			if (index === columns.length - 1 && !fit.ragged) w = Math.max(0, width - x);
+			if (index === columns.length - 1 && !ragged) w = Math.max(0, width - x);
 			place(shape.tree, i, { x, y, width: w, height }, ratio, gap, boxes);
 			x += w + gap;
 			i += shape.count;

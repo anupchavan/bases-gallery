@@ -77,3 +77,9 @@ test('10,000 tiles lay out in reasonable time', () => {
 	console.log(`10,000 tiles: ${ms.toFixed(2)} ms`);
 	assert.ok(ms < 800, `took ${ms} ms`);
 });
+
+test('no tile is taller than the pane', () => {
+	const items = photos(200, (i) => (i % 6 === 0 ? 2 : 1));
+	const { boxes } = mosaic(items, { ...base, maxTileHeight: 420 });
+	for (const b of boxes) assert.ok(b.height <= 420 + 0.5, `height ${b.height}`);
+});
