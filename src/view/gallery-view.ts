@@ -107,6 +107,8 @@ export class GalleryView extends BasesView {
 	private zoom: FillZoom | null = null;
 	private preview: HoverPreview | null = null;
 	private zoomHeldUpdate = false;
+	/** The item in the open zoom. */
+	private zoomIndex = -1;
 	/** Items laid out so far (whole pages). */
 	private loaded = 0;
 	private loadingMore = false;
@@ -419,6 +421,14 @@ export class GalleryView extends BasesView {
 			void this.app.workspace.openLinkText(item.file.path, '', Keymap.isModEvent(evt));
 			return;
 		}
+		this.openZoom(tile, false);
+	}
+
+	/** Fills the window with a tile's media, or swaps it into the open zoom. */
+	private openZoom(tile: Tile, replace: boolean): void {
+		const item = this.items[tile.index];
+		if (!item) return;
+		this.zoomIndex = tile.index;
 		const { kind, src } = item.media;
 		const size = this.sizes.get(src);
 		const el = tile.el;
@@ -428,11 +438,44 @@ export class GalleryView extends BasesView {
 			{
 				shown: tile.image,
 				scroller: this.scrollers[0] ?? null,
+				replace,
+				step: (delta) => this.step(delta),
 				takeVideo: () => this.preview?.handOff(el) ?? null,
 				details: (detailsEl, owner) =>
 					renderDetails(this.app, this.config, item.entry, this.settings?.locationProperty ?? 'note.coordinates', detailsEl, owner),
 			},
 		);
+	}
+
+	/**
+	 * The item before (-1) or after (+1) the one in the open zoom, or -1 when
+	 * there is none (no zoom, or the end of what is laid out).
+	 */
+	stepTarget(delta: number): number {
+		if (!this.zoom?.isOpen || this.zoom.isClosing || !this.layout) return -1;
+		const next = this.zoomIndex + delta;
+		return next >= 0 && next < this.layout.boxes.length ? next : -1;
+	}
+
+	/**
+	 * Moves the open zoom to the previous or next item. The gallery scrolls
+	 * underneath so that item's tile is on screen, and closing the zoom then
+	 * shrinks it back onto that tile.
+	 */
+	step(delta: number): void {
+		const next = this.stepTarget(delta);
+		const box = this.layout?.boxes[next];
+		const item = this.items[next];
+		if (next < 0 || !box || !item) return;
+		const scroller = this.scrollers[0];
+		if (scroller) {
+			const top = this.sizerEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop + box.y;
+			const visible = top >= scroller.scrollTop && top + box.height <= scroller.scrollTop + scroller.clientHeight;
+			if (!visible) scroller.scrollTop = top + box.height / 2 - scroller.clientHeight / 2;
+		}
+		this.renderVisible();
+		const tile = this.mounted.get(item.key);
+		if (tile) this.openZoom(tile, true);
 	}
 
 	/** Re-shows every tile, for a changed plugin setting. */

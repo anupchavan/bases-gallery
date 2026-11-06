@@ -16,6 +16,19 @@ export default class BasesGalleryPlugin extends Plugin {
 			options: galleryViewOptions,
 		});
 		this.addSettingTab(new GallerySettingTab(this.app, this));
+		// Shown only while a photo or video is zoomed. Mod+←/→ (and ←/→ on
+		// photos) already work in the zoom; these let people bind their own
+		// keys in Settings → Hotkeys.
+		this.addCommand({
+			id: 'show-previous',
+			name: 'Show previous item',
+			checkCallback: (checking) => this.step(-1, checking),
+		});
+		this.addCommand({
+			id: 'show-next',
+			name: 'Show next item',
+			checkCallback: (checking) => this.step(1, checking),
+		});
 		this.register(releasePdfWorker);
 		// Not awaited: startup stays a few registrations; views use the
 		// defaults until the saved settings arrive a moment later.
@@ -29,6 +42,16 @@ export default class BasesGalleryPlugin extends Plugin {
 	trackView(view: GalleryView): () => void {
 		this.views.add(view);
 		return () => this.views.delete(view);
+	}
+
+	/** Moves an open zoom to its previous or next item. */
+	private step(delta: number, checking: boolean): boolean {
+		for (const view of this.views) {
+			if (view.stepTarget(delta) < 0) continue;
+			if (!checking) view.step(delta);
+			return true;
+		}
+		return false;
 	}
 
 	/** Lets open galleries pick up a changed setting. */

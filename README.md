@@ -59,6 +59,8 @@ Video keys while zoomed:
 | F | Fullscreen |
 | I | Properties |
 
+In a zoomed photo or video, Cmd-← and Cmd-→ (Ctrl on Windows and Linux) show the previous and next item; photos also take ← and →. To use other keys, bind **Bases Gallery: Show previous item** and **Show next item** in **Settings → Hotkeys**.
+
 ### Supported files
 
 Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). PDFs in your vault show their first page and open in Obsidian's own PDF viewer. HDR photos and videos are detected; **Settings → Bases Gallery → HDR in tiles** chooses whether tiles show them in HDR.

@@ -68,6 +68,8 @@ function mapBase(path: string, locationProperty: BasesPropertyId): string {
 		'views:',
 		'  - type: map',
 		'    name: Location',
+		// No properties: the marker's popup would repeat the note's name.
+		'    order: []',
 		`    coordinates: ${locationProperty}`,
 		`    defaultZoom: ${MAP_ZOOM}`,
 		`    mapHeight: ${MAP_HEIGHT}`,

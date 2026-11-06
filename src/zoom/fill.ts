@@ -1,4 +1,4 @@
-import { App, Component, MarkdownRenderer, Scope, TFile, setIcon } from 'obsidian';
+import { App, Component, MarkdownRenderer, Modifier, Scope, TFile, setIcon } from 'obsidian';
 import type { MediaKind } from '../media/kinds';
 import { MUTED_KEY, VideoControls } from '../video/player';
 import type { DetailsContent } from '../view/details';
@@ -41,6 +41,13 @@ export interface ZoomOptions {
 	 * on with. Called after the zoom has measured the page.
 	 */
 	takeVideo?: () => HTMLVideoElement | null;
+	/**
+	 * Swap this media into the zoom that is already open (previous / next),
+	 * in place, instead of growing it from its tile.
+	 */
+	replace?: boolean;
+	/** Moves to the previous (-1) or next (+1) item. */
+	step?: (delta: number) => void;
 	/**
 	 * Renders the note's properties into the details panel, with `owner` for
 	 * anything that must be unloaded when the zoom closes. Returns null when
@@ -94,8 +101,6 @@ export class FillZoom extends Component {
 	private detailsOn = false;
 	private infoEl: HTMLElement | null = null;
 	private detailsEl: HTMLElement | null = null;
-	/** Room the details panel needs beside the media: its width plus two gaps. */
-	private detailsRoom = 0;
 	private onDetailsShown: (() => void) | null = null;
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
@@ -112,6 +117,10 @@ export class FillZoom extends Component {
 		return this.cloneEl !== null;
 	}
 
+	get isClosing(): boolean {
+		return this.closing;
+	}
+
 	onunload(): void {
 		this.cleanUp();
 	}
@@ -122,7 +131,8 @@ export class FillZoom extends Component {
 	 * as on MUBI.
 	 */
 	open(tileEl: HTMLElement, media: ZoomMedia, options: ZoomOptions): void {
-		if (this.isOpen || !tileEl.isConnected) return;
+		const replacing = options.replace === true && this.isOpen && !this.closing;
+		if ((this.isOpen && !replacing) || !tileEl.isConnected) return;
 		const doc = tileEl.doc;
 		const rect = tileEl.getBoundingClientRect();
 		if (rect.width === 0 || rect.height === 0) return;
@@ -136,7 +146,6 @@ export class FillZoom extends Component {
 		const px = (name: string): number => parseFloat(tileStyle.getPropertyValue(name)) || 0;
 		this.margin = px('--bases-gallery-zoom-margin');
 		this.marginX = px('--bases-gallery-zoom-margin-x');
-		this.detailsRoom = px('--bases-gallery-details-width') + 2 * px('--bases-gallery-details-gap');
 		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
 		const video = media.kind === 'video' ? (options.takeVideo?.() ?? null) : null;
@@ -145,9 +154,17 @@ export class FillZoom extends Component {
 			height: media.height || video?.videoHeight || shown?.naturalHeight || rect.height,
 		};
 
-		const overlay = doc.body.createDiv('bases-gallery-zoom-overlay');
-		const stage = doc.body.createDiv('bases-gallery-zoom-stage');
+		// Swapping keeps the page (and fullscreen): only the media and its
+		// controls are rebuilt.
+		const kept = replacing ? this.clearForSwap() : null;
+		const overlay = kept?.overlay ?? doc.body.createDiv('bases-gallery-zoom-overlay');
+		const stage = kept?.stage ?? doc.body.createDiv('bases-gallery-zoom-stage');
 		const box = stage.createDiv('bases-gallery-zoom-box');
+		if (kept) {
+			// Already in place: no growing, just a short fade of the new media.
+			stage.addClass('is-swapping');
+			box.addClass('is-open', 'is-swapped');
+		}
 		const clone =
 			media.kind === 'video'
 				? this.videoClone(box, media, shown, video)
@@ -176,6 +193,22 @@ export class FillZoom extends Component {
 		const session = this.addChild(new Component());
 		this.session = session;
 		this.scope = new Scope(this.app.scope);
+		const { step } = options;
+		if (step) {
+			const key = (modifiers: Modifier[], k: string, delta: number): void => {
+				this.scope?.register(modifiers, k, () => {
+					step(delta);
+					return false;
+				});
+			};
+			key(['Mod'], 'ArrowLeft', -1);
+			key(['Mod'], 'ArrowRight', 1);
+			// Videos keep ← and → for seeking; PDFs for the viewer.
+			if (media.kind === 'image') {
+				key([], 'ArrowLeft', -1);
+				key([], 'ArrowRight', 1);
+			}
+		}
 		this.scope.register([], 'Escape', () => {
 			if (this.isFullscreen()) void doc.exitFullscreen();
 			else this.close();
@@ -201,7 +234,7 @@ export class FillZoom extends Component {
 			session.registerDomEvent(clone, 'click', () => this.close());
 			session.registerDomEvent(box.win, 'resize', () => this.close());
 		}
-		if (options.details) this.addDetails(session, stage, box, options.details);
+		if (options.details) this.addDetails(session, stage, options.details);
 		session.registerDomEvent(overlay, 'click', () => this.close());
 		// In fullscreen the stage is all there is; a click beside the video closes.
 		session.registerDomEvent(stage, 'click', (evt) => {
@@ -227,6 +260,10 @@ export class FillZoom extends Component {
 			if (this.boxEl !== box || this.closing) return;
 			overlay.addClass('is-open');
 			box.addClass('is-open');
+			if (kept) {
+				stage.removeClass('is-swapping');
+				ready();
+			}
 		});
 
 		// Wheel input scrolls the pane underneath; the media rides along with
@@ -251,7 +288,8 @@ export class FillZoom extends Component {
 			session.registerDomEvent(stage, 'wheel', forward, { passive: false });
 			session.registerDomEvent(scroller, 'scroll', () => {
 				if (this.isFullscreen()) return;
-				box.setCssProps({ '--zoom-ride': `${startScroll - scroller.scrollTop}px` });
+				// On the stage: the media, the card and its button ride together.
+				stage.setCssProps({ '--zoom-ride': `${startScroll - scroller.scrollTop}px` });
 			});
 		}
 
@@ -387,9 +425,6 @@ export class FillZoom extends Component {
 			'--zoom-start-scale': `${startW / width}`,
 		});
 		this.frameHeight = height;
-		// Beside the media when the window has room on its right; otherwise
-		// over the media, under the info button.
-		this.detailsEl?.toggleClass('is-over', viewW - (viewW + width) / 2 < this.detailsRoom);
 	}
 
 	/** Fits again at once, with the size transitions off until it has painted. */
@@ -399,8 +434,6 @@ export class FillZoom extends Component {
 		stage.addClass('is-refitting');
 		this.fit();
 		window.clearTimeout(this.refitTimer);
-		window.clearTimeout(this.darkTimer);
-		this.darkTimer = 0;
 		this.refitTimer = window.setTimeout(() => {
 			if (this.stageEl !== stage) return;
 			stage.removeClass('is-refitting');
@@ -418,7 +451,6 @@ export class FillZoom extends Component {
 	private addDetails(
 		session: Component,
 		stage: HTMLElement,
-		box: HTMLElement,
 		render: (el: HTMLElement, owner: Component) => DetailsContent | null,
 	): void {
 		const panel = stage.createDiv('bases-gallery-details');
@@ -429,11 +461,11 @@ export class FillZoom extends Component {
 		}
 		// Heavy parts (a map) wait until the panel first shows on screen.
 		this.onDetailsShown = content.onShown ?? null;
-		const info = box.createEl('button', {
-			cls: 'bases-gallery-zoom-info',
-			attr: { type: 'button', 'aria-label': 'Properties' },
-		});
+		// After the card, so it draws on top: it sits inside the card's corner.
+		const info = stage.createEl('button', { cls: 'bases-gallery-zoom-info', attr: { type: 'button' } });
 		setIcon(info, 'info');
+		// No aria-label: Obsidian would show it as a tooltip.
+		info.createSpan({ cls: 'bases-gallery-sr-only', text: 'Properties' });
 		this.infoEl = info;
 		this.detailsEl = panel;
 		this.showDetails(this.detailsOn);
@@ -532,7 +564,22 @@ export class FillZoom extends Component {
 		this.overlayEl?.toggleClass('is-dark', dark);
 	}
 
-	private cleanUp(): void {
+	/**
+	 * Tears down the current media, its controls and listeners, but keeps
+	 * the page and the stage, for the next item to move in.
+	 */
+	private clearForSwap(): { overlay: HTMLElement; stage: HTMLElement } | null {
+		const { overlayEl: overlay, stageEl: stage } = this;
+		if (!overlay || !stage) return null;
+		this.releaseMedia();
+		stage.empty();
+		stage.removeClass('is-ready', 'is-peeking', 'is-idle', 'has-details');
+		stage.setCssProps({ '--zoom-ride': '0px' });
+		return { overlay, stage };
+	}
+
+	/** Frees the current media and everything that belongs to it. */
+	private releaseMedia(): void {
 		if (this.wheelTimer) window.clearTimeout(this.wheelTimer);
 		this.wheelTimer = 0;
 		window.clearTimeout(this.refitTimer);
@@ -548,10 +595,6 @@ export class FillZoom extends Component {
 			clone.load();
 		}
 		this.sourceEl?.removeClass('is-zoom-source');
-		this.overlayEl?.detach();
-		this.stageEl?.detach();
-		this.overlayEl = null;
-		this.stageEl = null;
 		this.cloneEl = null;
 		this.pdfEl = null;
 		this.boxEl = null;
@@ -560,6 +603,16 @@ export class FillZoom extends Component {
 		this.onDetailsShown = null;
 		this.sourceEl = null;
 		this.base = null;
+	}
+
+	private cleanUp(): void {
+		this.releaseMedia();
+		window.clearTimeout(this.darkTimer);
+		this.darkTimer = 0;
+		this.overlayEl?.detach();
+		this.stageEl?.detach();
+		this.overlayEl = null;
+		this.stageEl = null;
 		this.closing = false;
 		this.onClosed();
 	}
