@@ -1,12 +1,12 @@
-import { BasesView, QueryController, debounce } from 'obsidian';
+import { BasesView, QueryController, TFile, debounce, getAllTags } from 'obsidian';
 import type { Size } from '../media/dimensions';
-import { connections, incomingLinkCounts, sizesFromConnections } from '../media/importance';
+import { NoteSignals, areaWeights, incomingLinkCounts, relatednessScores } from '../media/importance';
 import { probeSize } from '../media/probe';
 import { loadSizes, saveSizes } from '../media/size-cache';
 import { Box, justify } from '../layout/justify';
 import { mosaic } from '../layout/mosaic';
 import { MediaSource, resolveEntryMedia } from '../media/resolve';
-import { GalleryConfig, parseSize, readGalleryConfig } from './options';
+import { GalleryConfig, parseSizeWeight, readGalleryConfig } from './options';
 import { Tile } from './tile';
 
 export const GALLERY_VIEW_TYPE = 'gallery';
@@ -31,9 +31,9 @@ const RESIZE_SETTLE_MS = 150;
 interface Item {
 	key: string;
 	media: MediaSource;
-	/** 0 small, 1 medium, 2 large. */
-	size: number;
-	notePath: string;
+	/** Area this tile aims for, as a multiple of a medium tile. */
+	weight: number;
+	file: TFile;
 }
 
 interface PlacedLayout {
@@ -119,7 +119,7 @@ export class GalleryView extends BasesView {
 		// Links change as notes are edited; sizes follow, at most once a second.
 		this.registerEvent(
 			this.app.metadataCache.on('resolved', () => {
-				if (this.settings?.sizeBy === 'connections') this.refreshConnections();
+				if (this.settings?.sizeBy === 'related') this.refreshWeights();
 			}),
 		);
 
@@ -136,7 +136,7 @@ export class GalleryView extends BasesView {
 		this.probeQueue = [];
 		this.flushSaves.run();
 		this.settleResize.cancel();
-		this.refreshConnections.cancel();
+		this.refreshWeights.cancel();
 		for (const tile of this.mounted.values()) tile.release();
 		this.mounted.clear();
 		this.pool.length = 0;
@@ -148,52 +148,62 @@ export class GalleryView extends BasesView {
 		for (const entry of this.data.data) {
 			const media = resolveEntryMedia(this.app, entry, settings.mediaProperty);
 			if (!media) continue;
-			let size = 1;
+			let weight = 1;
 			if (settings.sizeBy === 'property' && settings.sizeProperty) {
 				const value = entry.getValue(settings.sizeProperty);
-				if (value?.isTruthy()) size = parseSize(value.toString());
+				if (value?.isTruthy()) weight = parseSizeWeight(value.toString());
 			}
 			items.push({
 				key: `${entry.file.path}\n${media.src}`,
 				media,
-				size,
-				notePath: entry.file.path,
+				weight,
+				file: entry.file,
 			});
 		}
 		this.settings = settings;
 		this.items = items;
-		if (settings.sizeBy === 'connections') this.applyConnectionSizes();
+		if (settings.sizeBy === 'related') this.applyRelatedWeights();
 		this.updateEmptyState(settings);
 		void this.ensureSizes();
 	}
 
-	private linkCounts: Map<string, number> | null = null;
-	private readonly refreshConnections = debounce(
+	private readonly refreshWeights = debounce(
 		() => {
-			this.linkCounts = null;
-			if (this.applyConnectionSizes()) this.requestUpdate(true);
+			if (this.applyRelatedWeights()) this.requestUpdate(true);
 		},
 		1000,
 		true,
 	);
 
-	/** Sizes tiles by how many files link to their note or media. Returns true if any changed. */
-	private applyConnectionSizes(): boolean {
-		const resolved = this.app.metadataCache.resolvedLinks;
-		this.linkCounts ??= incomingLinkCounts(resolved);
-		const counts = this.linkCounts;
-		const values = this.items.map((item) => {
+	/**
+	 * Weights tiles by how related their note is to the rest of the gallery,
+	 * from Obsidian's link index and tag cache. One pass over links and tags.
+	 * Returns true if any weight changed.
+	 */
+	private applyRelatedWeights(): boolean {
+		const { metadataCache } = this.app;
+		const resolved = metadataCache.resolvedLinks;
+		const incoming = incomingLinkCounts(resolved);
+		const signals: NoteSignals[] = this.items.map((item) => {
+			const path = item.file.path;
+			const targets = resolved[path] ?? {};
 			const mediaPath = item.media.file?.path ?? null;
-			const notePath = item.notePath;
-			const linksToMedia = mediaPath !== null && (resolved[notePath]?.[mediaPath] ?? 0) > 0;
-			return connections(counts, notePath, mediaPath, linksToMedia);
+			const cache = metadataCache.getFileCache(item.file);
+			const tags = cache ? [...new Set((getAllTags(cache) ?? []).map((t) => t.toLowerCase()))] : [];
+			let backlinks = incoming.get(path) ?? 0;
+			if (mediaPath && mediaPath !== path) {
+				backlinks += Math.max(0, (incoming.get(mediaPath) ?? 0) - (targets[mediaPath] ? 1 : 0));
+			}
+			// The note's own media isn't a sign of relatedness.
+			const links = Object.keys(targets).filter((t) => t !== mediaPath);
+			return { path, links, tags, backlinks };
 		});
-		const sizes = sizesFromConnections(values);
+		const weights = areaWeights(relatednessScores(signals));
 		let changed = false;
 		this.items.forEach((item, i) => {
-			const size = sizes[i] ?? 1;
-			if (item.size !== size) {
-				item.size = size;
+			const weight = weights[i] ?? 1;
+			if (item.weight !== weight) {
+				item.weight = weight;
 				changed = true;
 			}
 		});
@@ -307,7 +317,7 @@ export class GalleryView extends BasesView {
 				: mosaic(
 						this.items.map((item, i) => ({
 							ratio: ratios[i] ?? fallback,
-							size: item.size,
+							weight: item.weight,
 						})),
 						{
 							width: this.layoutWidth,

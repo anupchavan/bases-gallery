@@ -1,10 +1,10 @@
 import { BasesAllOptions, BasesPropertyId, BasesViewConfig } from 'obsidian';
 
-export const DEFAULT_TILE_SIZE = 240;
+export const DEFAULT_TILE_SIZE = 300;
 export const DEFAULT_MAX_CROP = 10;
 
 export type GalleryLayoutKind = 'mosaic' | 'rows';
-export type SizeSource = 'connections' | 'property' | 'none';
+export type SizeSource = 'related' | 'property' | 'none';
 
 export interface GalleryConfig {
 	layout: GalleryLayoutKind;
@@ -37,9 +37,9 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 			type: 'dropdown',
 			key: 'sizeBy',
 			displayName: 'Tile size from',
-			default: 'connections',
+			default: 'related',
 			options: {
-				connections: 'Links to the note',
+				related: 'How related the note is',
 				property: 'A property',
 				none: 'Nothing (all equal)',
 			},
@@ -87,18 +87,20 @@ export function readGalleryConfig(config: BasesViewConfig): GalleryConfig {
 }
 
 /**
- * Reads a size property value: small, medium or large (or s, m, l, or 1 to
- * 3). Anything else is medium.
+ * Reads a size property value as an area weight: small (s, 1) 0.6, large
+ * (l, 3) 3, anything else 1. A plain number is used as the weight itself.
  */
-export function parseSize(text: string): number {
+export function parseSizeWeight(text: string): number {
 	const value = text.trim().toLowerCase();
-	if (value === 'small' || value === 's' || value === '1') return 0;
-	if (value === 'large' || value === 'l' || value === '3') return 2;
+	if (value === 'small' || value === 's' || value === '1') return 0.6;
+	if (value === 'large' || value === 'l' || value === '3') return 3;
+	const number = Number(value);
+	if (value !== '' && Number.isFinite(number) && number > 0) return Math.min(number, 8);
 	return 1;
 }
 
 function readSizeSource(value: unknown): SizeSource {
-	return value === 'property' || value === 'none' ? value : 'connections';
+	return value === 'property' || value === 'none' ? value : 'related';
 }
 
 function readNumber(value: unknown, fallback: number): number {

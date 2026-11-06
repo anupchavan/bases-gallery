@@ -20,8 +20,8 @@ import type { Box } from './justify';
 export interface MosaicItem {
 	/** Aspect ratio, width / height. */
 	ratio: number;
-	/** Relative size: 0 small, 1 medium, 2 large. */
-	size: number;
+	/** Area this tile aims for, as a multiple of a medium tile (1). */
+	weight: number;
 }
 
 export interface MosaicOptions {
@@ -48,11 +48,9 @@ type Tree = number | { dir: 'h' | 'v'; children: [Tree, Tree] };
 /** Most tiles in one column. Slicing trees: 1, 2, 6, 22 shapes (half are stacks). */
 const MAX_COLUMN_TILES = 4;
 const MAX_BAND_TILES = 12;
-/** Target area multiplier per size class. */
-const AREA_BY_SIZE = [0.55, 1, 2.6];
 /** Band heights allowed, as multiples of the tile size. */
 const MIN_BAND = 0.6;
-const MAX_BAND = 4;
+const MAX_BAND = 5;
 /** Band height the column beam assumes when ranking partial bands. */
 const TYPICAL_BAND = 2;
 /** Each band adds a full-width seam. */
@@ -221,9 +219,12 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 
 	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
 	const target = new Float64Array(n);
+	const importance = new Float64Array(n);
 	for (let i = 0; i < n; i++) {
-		const size = clamp(Math.round(items[i]?.size ?? 1), 0, 2);
-		target[i] = tile * tile * (AREA_BY_SIZE[size] ?? 1);
+		const raw = items[i]?.weight ?? 1;
+		const weight = Number.isFinite(raw) && raw > 0 ? raw : 1;
+		target[i] = tile * tile * weight;
+		importance[i] = Math.max(1, weight);
 	}
 	const scratch: Box[] = new Array<Box>(n);
 
@@ -252,8 +253,10 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 			const h = (leaves[o + 2] ?? 0) * height + (leaves[o + 3] ?? 0);
 			if (w <= 0 || h <= 0) return INFEASIBLE;
 			if (h < minTile || w * h < minTile * minTile) return INFEASIBLE;
+			// Important tiles count more: missing their size costs more than
+			// shrinking an ordinary neighbour to make room.
 			const d = Math.log((w * h) / (target[first + k] ?? 1));
-			cost += d * d;
+			cost += (importance[first + k] ?? 1) * d * d;
 		}
 		return cost;
 	};
@@ -429,8 +432,4 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 
 function safeRatio(ratio: number | undefined): number {
 	return ratio !== undefined && Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
-}
-
-function clamp(value: number, min: number, max: number): number {
-	return Math.min(max, Math.max(min, value));
 }

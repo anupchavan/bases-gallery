@@ -6,8 +6,8 @@ const base = { width: 1000, tileSize: 240, gap: 8, minTileSize: 96 };
 const photoRatios = [1.5, 0.67, 1.33, 0.75, 1.78, 0.56, 1, 2.4, 0.8, 1.25];
 let seed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-const photos = (n, size = () => 1) =>
-	Array.from({ length: n }, (_, i) => ({ ratio: photoRatios[Math.floor(rand() * 10)], size: size(i) }));
+const photos = (n, weight = () => 1) =>
+	Array.from({ length: n }, (_, i) => ({ ratio: photoRatios[Math.floor(rand() * 10)], weight: weight(i) }));
 
 function check(items, opts) {
 	const { boxes, height } = mosaic(items, opts);
@@ -46,17 +46,17 @@ test('sizes and seams are real-valued, not a few fixed steps', () => {
 });
 
 test('more important photos get bigger', () => {
-	const items = photos(200, (i) => (i % 5 === 0 ? 2 : i % 5 === 1 ? 0 : 1));
+	const items = photos(200, (i) => (i % 5 === 0 ? 3 : i % 5 === 1 ? 0.6 : 1));
 	const boxes = check(items, base);
-	const avg = (s) => {
-		const areas = boxes.filter((_, i) => items[i].size === s).map((b) => b.width * b.height);
+	const avg = (w) => {
+		const areas = boxes.filter((_, i) => items[i].weight === w).map((b) => b.width * b.height);
 		return areas.reduce((x, y) => x + y, 0) / areas.length;
 	};
-	assert.ok(avg(2) > avg(1) * 1.5 && avg(1) > avg(0), `large ${avg(2)} medium ${avg(1)} small ${avg(0)}`);
+	assert.ok(avg(3) > avg(1) * 1.5 && avg(1) > avg(0.6), `large ${avg(3)} medium ${avg(1)} small ${avg(0.6)}`);
 });
 
 test('no tile is shorter than the floor or smaller than its square', () => {
-	const boxes = check(photos(300, () => (rand() < 0.4 ? 0 : 1)), { ...base, minTileSize: 120 });
+	const boxes = check(photos(300, () => (rand() < 0.4 ? 0.6 : 1)), { ...base, minTileSize: 120 });
 	for (const b of boxes) {
 		assert.ok(b.height >= 120 - 0.5, `height ${b.height}`);
 		assert.ok(b.width * b.height >= 120 * 120 - 1, `area ${b.width * b.height}`);
@@ -64,7 +64,7 @@ test('no tile is shorter than the floor or smaller than its square', () => {
 });
 
 test('extreme shapes still fit', () => {
-	const items = [1.5, 6, 1.33, 0.33, 0.33, 1.5, 1, 1.78, 0.75, 0.75, 1.5, 1.5].map((ratio) => ({ ratio, size: 1 }));
+	const items = [1.5, 6, 1.33, 0.33, 0.33, 1.5, 1, 1.78, 0.75, 0.75, 1.5, 1.5].map((ratio) => ({ ratio, weight: 1 }));
 	check(items, base);
 });
 
@@ -79,7 +79,15 @@ test('10,000 tiles lay out in reasonable time', () => {
 });
 
 test('no tile is taller than the pane', () => {
-	const items = photos(200, (i) => (i % 6 === 0 ? 2 : 1));
+	const items = photos(200, (i) => (i % 6 === 0 ? 3 : 1));
 	const { boxes } = mosaic(items, { ...base, maxTileHeight: 420 });
 	for (const b of boxes) assert.ok(b.height <= 420 + 0.5, `height ${b.height}`);
+});
+
+test('the most important tile can span several tile heights', () => {
+	const items = photos(120, (i) => (i === 40 ? 6 : 1));
+	const { boxes } = mosaic(items, { ...base, maxTileHeight: 1200 });
+	const area = (b) => b.width * b.height;
+	const typical = boxes.map(area).sort((a, b) => a - b)[60];
+	assert.ok(area(boxes[40]) > typical * 4, `top ${area(boxes[40])} vs typical ${typical}`);
 });
