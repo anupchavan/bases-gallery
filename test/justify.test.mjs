@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { growth } from './timing.mjs';
 import { justify } from '../src/layout/justify.ts';
 
 const base = { width: 1000, targetHeight: 200, gap: 8, maxCropPerSide: 0.1 };
@@ -82,15 +83,16 @@ test('bad ratios fall back to square', () => {
 	for (const b of layout.boxes) assert.ok(Number.isFinite(b.width) && b.width > 0);
 });
 
-test('10,000 tiles lay out quickly', () => {
-	let seed = 1;
-	const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-	const ratios = Array.from({ length: 10000 }, () => 0.3 + rand() * 2.7);
-	justify(ratios, base); // warm up
-	const t0 = performance.now();
-	const layout = justify(ratios, base);
-	const ms = performance.now() - t0;
-	console.log(`10,000 tiles: ${ms.toFixed(2)} ms, ${layout.rows.length} rows`);
-	cropWithinCap(layout, ratios, base.maxCropPerSide);
-	assert.ok(ms < 50, `took ${ms} ms`);
+test('40,000 tiles lay out in linear time', () => {
+	const make = (n) => {
+		let seed = 1;
+		const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+		return Array.from({ length: n }, () => 0.3 + rand() * 2.7);
+	};
+	const ratios = make(10000);
+	cropWithinCap(justify(ratios, base), ratios, base.maxCropPerSide);
+	// Justify is so fast that small inputs are mostly timer noise.
+	const ratio = growth(make, (r) => justify(r, base), 40000);
+	console.log(`10,000 to 40,000 tiles: ${ratio.toFixed(1)}x the time`);
+	assert.ok(ratio < 10, `grew ${ratio.toFixed(1)}x for 4x the tiles`);
 });

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { growth } from './timing.mjs';
 import { incomingLinkCounts, relatednessScores, areaWeights } from '../src/media/importance.ts';
 
 test('counts distinct linking files, ignoring self links', () => {
@@ -24,15 +25,12 @@ test('shared links, shared tags, direct links and backlinks all raise the score'
 	assert.ok(s[0] > relatednessScores([note('a', ['x', 'y'], ['#trip']), note('b', ['x', 'y'])])[0], 'tags add');
 });
 
-test('scores are a single pass: 20,000 notes stay fast', () => {
-	const notes = Array.from({ length: 20000 }, (_, i) =>
-		note(`n${i}`, [`hub${i % 50}`, `n${(i * 7) % 20000}`], [`#t${i % 30}`], i % 13),
-	);
-	const t0 = performance.now();
-	relatednessScores(notes);
-	const ms = performance.now() - t0;
-	console.log(`20,000 notes: ${ms.toFixed(1)} ms`);
-	assert.ok(ms < 100);
+test('scores are a single pass: time grows linearly up to 20,000 notes', () => {
+	const make = (n) =>
+		Array.from({ length: n }, (_, i) => note(`n${i}`, [`hub${i % 50}`, `n${(i * 7) % n}`], [`#t${i % 30}`], i % 13));
+	const ratio = growth(make, (notes) => relatednessScores(notes), 20000);
+	console.log(`5,000 to 20,000 notes: ${ratio.toFixed(1)}x the time`);
+	assert.ok(ratio < 10, `grew ${ratio.toFixed(1)}x for 4x the notes`);
 });
 
 test('area weights by rank: top note much bigger, ties equal, no links even', () => {

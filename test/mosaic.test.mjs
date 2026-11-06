@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { growth } from './timing.mjs';
 import { mosaic } from '../src/layout/mosaic.ts';
 
 const base = { width: 1000, tileSize: 240, gap: 8, minTileSize: 96 };
@@ -68,14 +69,10 @@ test('extreme shapes still fit', () => {
 	check(items, base);
 });
 
-test('10,000 tiles lay out in reasonable time', () => {
-	const items = photos(10000);
-	mosaic(items, base);
-	const t0 = performance.now();
-	mosaic(items, base);
-	const ms = performance.now() - t0;
-	console.log(`10,000 tiles: ${ms.toFixed(2)} ms`);
-	assert.ok(ms < 800, `took ${ms} ms`);
+test('10,000 tiles lay out in linear time', () => {
+	const ratio = growth(photos, (items) => mosaic(items, base), 10000);
+	console.log(`2,500 to 10,000 tiles: ${ratio.toFixed(1)}x the time`);
+	assert.ok(ratio < 10, `grew ${ratio.toFixed(1)}x for 4x the tiles`);
 });
 
 test('no tile is taller than the pane', () => {
