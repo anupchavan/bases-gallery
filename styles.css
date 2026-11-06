@@ -122,7 +122,7 @@
 }
 
 .bases-gallery-zoom-stage:fullscreen {
-	background: var(--background-primary);
+	background: black;
 	pointer-events: auto;
 	cursor: zoom-out;
 }
@@ -176,7 +176,11 @@ video.bases-gallery-zoom-media {
 	cursor: default;
 }
 
-.bases-gallery-zoom-stage.is-idle,
+.bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
+	border-radius: 0;
+}
+
+.bases-gallery-zoom-stage.is-idle .bases-gallery-zoom-box,
 .bases-gallery-zoom-stage.is-idle video.bases-gallery-zoom-media {
 	cursor: none;
 }
@@ -201,8 +205,8 @@ video.bases-gallery-zoom-media {
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
-	padding: var(--size-4-8) var(--size-4-3) var(--size-4-3);
-	background: linear-gradient(transparent, color-mix(in oklch, black 60%, transparent));
+	padding: var(--size-4-16) var(--size-4-3) var(--size-4-3);
+	background: linear-gradient(transparent, color-mix(in oklch, black 50%, transparent) 50%, color-mix(in oklch, black 80%, transparent));
 	color: white;
 	opacity: 0;
 	pointer-events: none;
@@ -224,14 +228,14 @@ video.bases-gallery-zoom-media {
 	height: var(--bases-gallery-chip-size);
 	padding: 0;
 	border-radius: 50%;
-	background: transparent;
-	box-shadow: none;
+	background: var(--bases-gallery-chip-fill);
+	box-shadow: var(--bases-gallery-chip-ring);
 	color: inherit;
 	cursor: pointer;
 }
 
 .bases-gallery-controls .bases-gallery-control:hover {
-	background: var(--bases-gallery-chip-fill);
+	background: var(--bases-gallery-chip-fill-hover);
 	box-shadow: var(--bases-gallery-chip-ring);
 }
 

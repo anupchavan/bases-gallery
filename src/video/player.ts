@@ -35,6 +35,8 @@ export class VideoControls extends Component {
 	private frame = 0;
 	private scrubbing = false;
 	private alive = false;
+	/** Whether the pointer is over the video. */
+	private hovered = false;
 	/** Last drawn button states, so media events don't redraw icons. */
 	private drawn = '';
 
@@ -65,12 +67,25 @@ export class VideoControls extends Component {
 		for (const name of ['play', 'pause', 'volumechange', 'durationchange', 'progress', 'seeked'] as const) {
 			this.registerDomEvent(video, name, () => this.render());
 		}
-		this.registerDomEvent(video, 'play', () => this.wake());
+		this.registerDomEvent(video, 'play', () => (this.hovered ? this.wake() : this.loop()));
 		this.registerDomEvent(video.doc, 'fullscreenchange', () => this.render());
 		this.registerDomEvent(this.el, 'click', (evt) => evt.stopPropagation());
 		this.registerDomEvent(this.trackEl, 'pointerdown', (evt) => this.startScrub(evt));
+		// Controls belong to the video: they show while the pointer is on it.
+		const box = this.el.parentElement;
+		if (box) {
+			this.registerDomEvent(box, 'pointerenter', () => {
+				this.hovered = true;
+				this.wake();
+			});
+			this.registerDomEvent(box, 'pointermove', () => this.wake());
+			this.registerDomEvent(box, 'pointerleave', () => {
+				this.hovered = false;
+				if (!this.scrubbing) this.hide();
+			});
+		}
 		this.render();
-		this.wake();
+		this.hide();
 	}
 
 	onunload(): void {
@@ -100,16 +115,25 @@ export class VideoControls extends Component {
 		key('f', () => this.host.toggleFullscreen());
 	}
 
-	/** Shows the controls, and hides them again after a pause if playing. */
+	/**
+	 * Shows the controls. They stay while the pointer rests on a paused
+	 * video; otherwise they hide after two idle seconds (a key press away
+	 * from the video shows them briefly).
+	 */
 	wake(): void {
 		this.idleEl.removeClass('is-idle');
 		window.clearTimeout(this.idleTimer);
 		this.loop();
-		if (this.video.paused) return;
+		if (this.video.paused && this.hovered) return;
 		this.idleTimer = window.setTimeout(() => {
-			if (this.video.paused || this.scrubbing) return;
-			this.idleEl.addClass('is-idle');
+			if ((this.video.paused && this.hovered) || this.scrubbing) return;
+			this.hide();
 		}, IDLE_HIDE_MS);
+	}
+
+	private hide(): void {
+		window.clearTimeout(this.idleTimer);
+		this.idleEl.addClass('is-idle');
 	}
 
 	togglePlay(): void {
@@ -149,6 +173,7 @@ export class VideoControls extends Component {
 		const move = (e: PointerEvent): void => seek(e);
 		const up = (): void => {
 			this.scrubbing = false;
+			if (!this.hovered) this.hide();
 			this.trackEl.removeEventListener('pointermove', move);
 			this.trackEl.removeEventListener('pointerup', up);
 			this.trackEl.removeEventListener('pointercancel', up);
@@ -186,7 +211,7 @@ export class VideoControls extends Component {
 			setTooltip(this.fullscreenEl, full ? 'Exit fullscreen (f)' : 'Fullscreen (f)', { placement: 'top' });
 		}
 		this.renderProgress();
-		if (video.paused) this.wake();
+		if (video.paused && this.hovered) this.wake();
 	}
 
 	private renderProgress(): void {

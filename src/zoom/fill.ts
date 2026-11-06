@@ -135,8 +135,6 @@ export class FillZoom extends Component {
 			controls.registerKeys(this.scope);
 			session.registerDomEvent(clone, 'click', () => controls.togglePlay());
 			session.registerDomEvent(clone, 'dblclick', () => this.toggleFullscreen());
-			session.registerDomEvent(overlay, 'pointermove', () => controls.wake());
-			session.registerDomEvent(stage, 'pointermove', () => controls.wake());
 			// Window size changes (fullscreen included) refit the video.
 			session.registerDomEvent(box.win, 'resize', () => this.fit());
 			session.registerDomEvent(doc, 'fullscreenchange', () => this.fit());
