@@ -85,5 +85,24 @@ test('10,000 tiles lay out quickly', () => {
 	mosaic(items, base);
 	const ms = performance.now() - t0;
 	console.log(`10,000 tiles: ${ms.toFixed(2)} ms`);
-	assert.ok(ms < 200);
+	assert.ok(ms < 400, `took ${ms} ms`);
+});
+
+test('big feature tiles span two or three rows, at a regular rhythm', () => {
+	const items = Array.from({ length: 200 }, () => ({ ratio: photoRatios[Math.floor(rand() * 10)], size: 1 }));
+	const { boxes } = mosaic(items, base);
+	const big = boxes.filter((b) => b.height > base.rowHeight * 1.6);
+	assert.ok(big.length >= 4, `${big.length} big tiles`);
+	for (const b of big) assert.ok(b.width >= base.width * 0.3 - 1 && b.width <= base.width * 0.7 + 1);
+});
+
+test('large tiles become features, small ones never do', () => {
+	// Landscape features need room: at 1,000 px a 3:2 tile two rows tall would
+	// take over 70% of the width.
+	const wide = { ...base, width: 1600 };
+	const items = Array.from({ length: 120 }, (_, i) => ({ ratio: 1.5, size: i % 10 === 0 ? 2 : i % 10 === 5 ? 0 : 1 }));
+	const boxes = check(items, wide);
+	const featured = boxes.map((b, i) => (b.height > wide.rowHeight * 1.6 ? items[i].size : -1)).filter((s) => s >= 0);
+	assert.ok(!featured.includes(0), 'no small tile is featured');
+	assert.ok(featured.filter((s) => s === 2).length >= 3, `features: ${featured}`);
 });

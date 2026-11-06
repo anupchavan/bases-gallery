@@ -1,5 +1,4 @@
 import { setIcon } from 'obsidian';
-import { BOTTOM_LEFT, BOTTOM_RIGHT, TOP_LEFT, TOP_RIGHT } from '../layout/corners';
 import { Box } from '../layout/justify';
 import { MediaSource } from '../media/resolve';
 
@@ -13,7 +12,6 @@ export class Tile {
 	private iconEl: HTMLElement | null = null;
 	private src = '';
 	private box: Box | null = null;
-	private corners = -1;
 
 	constructor(
 		parentEl: HTMLElement,
@@ -46,14 +44,7 @@ export class Tile {
 		}
 	}
 
-	place(box: Box, corners: number): void {
-		if (corners !== this.corners) {
-			this.corners = corners;
-			this.el.toggleClass('is-outer-top-left', (corners & TOP_LEFT) !== 0);
-			this.el.toggleClass('is-outer-top-right', (corners & TOP_RIGHT) !== 0);
-			this.el.toggleClass('is-outer-bottom-right', (corners & BOTTOM_RIGHT) !== 0);
-			this.el.toggleClass('is-outer-bottom-left', (corners & BOTTOM_LEFT) !== 0);
-		}
+	place(box: Box): void {
 		const prev = this.box;
 		if (
 			prev &&

@@ -78,6 +78,21 @@ const HEIGHT_TOLERANCE = 0.3;
 const BEAM = 6;
 const INFEASIBLE = 1e6;
 
+/** Feature bands: one big tile beside this many sub-rows. */
+const FEATURE_ROWS = [2, 3];
+const MAX_SUBROW_ITEMS = 4;
+/** Width a feature tile takes, as a share of the gallery. */
+const FEATURE_MIN_SHARE = 0.3;
+const FEATURE_MAX_SHARE = 0.7;
+const FEATURE_PENALTY = 0.05;
+/** Rhythm: at least this many plain rows between features, and a cost per row past the max. */
+const MIN_FEATURE_GAP = 2;
+const MAX_FEATURE_GAP = 4;
+const LATE_FEATURE_PENALTY = 0.25;
+const CADENCE_STATES = 6;
+
+type Band = { kind: 'row'; path: Path } | { kind: 'feature'; lens: number[] };
+
 /**
  * Every block and row has width = a * height - b, with a and b fixed by its
  * tiles and gaps. That makes fitting a row a one-unknown equation.
@@ -182,15 +197,70 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 		return { cost: INFEASIBLE, height: target, stretch: 1, ragged: true };
 	};
 
-	const best = new Float64Array(n + 1).fill(Infinity);
-	const choice: (Path | null)[] = new Array<Path | null>(n + 1).fill(null);
-	const from = new Int32Array(n + 1);
-	best[0] = 0;
+	// Prefix sums of ratios, for sub-rows of feature bands.
+	const prefix = new Float64Array(n + 1);
+	for (let i = 0; i < n; i++) prefix[i + 1] = (prefix[i] ?? 0) + ratio(i);
+	const ratioSum = (from: number, to: number): number => (prefix[to] ?? 0) - (prefix[from] ?? 0);
+
+	/**
+	 * A feature band: tile `start` spans the whole band, next to a column of
+	 * `lens.length` justified sub-rows. Solving the slicing tree
+	 * H(feature, V(row, row, ...)) for the band height H:
+	 *   H = ((W - g) S - Q + (k - 1) g) / (1 + r S)
+	 * with S = sum 1/A_j and Q = sum G_j/A_j over sub-rows (A_j: ratio sum,
+	 * G_j: gaps in the sub-row) and r the feature's ratio.
+	 */
+	const fitFeature = (start: number, lens: number[]): number => {
+		const k = lens.length;
+		let S = 0;
+		let Q = 0;
+		let i = start + 1;
+		for (const len of lens) {
+			const A = ratioSum(i, i + len);
+			S += 1 / A;
+			Q += ((len - 1) * gap) / A;
+			i += len;
+		}
+		const r = ratio(start);
+		const H = ((width - gap) * S - Q + (k - 1) * gap) / (1 + r * S);
+		const featureWidth = r * H;
+		const column = width - gap - featureWidth;
+		if (column <= 0) return INFEASIBLE;
+		// The feature should read as big: a third to two thirds of the width.
+		if (featureWidth < width * FEATURE_MIN_SHARE || featureWidth > width * FEATURE_MAX_SHARE) {
+			return INFEASIBLE;
+		}
+		let cost = 0;
+		i = start + 1;
+		for (const len of lens) {
+			const h = (column - (len - 1) * gap) / ratioSum(i, i + len);
+			if (h < minHeight || h > maxHeight) return INFEASIBLE;
+			cost += deviation(h, target);
+			for (let j = i; j < i + len; j++) if (size(j) === 2) cost += 0.3;
+			i += len;
+		}
+		const featureSize = size(start);
+		if (featureSize === 2) cost -= 0.3;
+		else if (featureSize === 0) cost += 1;
+		return cost;
+	};
+
+	// Dynamic programming over (tiles placed, bands since the last feature).
+	const states = CADENCE_STATES;
+	const best = new Float64Array((n + 1) * states).fill(Infinity);
+	const backFrom = new Int32Array((n + 1) * states).fill(-1);
+	const backState = new Int8Array((n + 1) * states);
+	const backBand: (Band | null)[] = new Array<Band | null>((n + 1) * states).fill(null);
+	best[MIN_FEATURE_GAP] = 0;
 
 	for (let start = 0; start < n; start++) {
-		const base = best[start] ?? Infinity;
-		if (base === Infinity) continue;
+		let any = false;
+		for (let c = 0; c < states; c++) if ((best[start * states + c] ?? Infinity) < Infinity) any = true;
+		if (!any) continue;
 
+		const candidates: { end: number; cost: number; band: Band }[] = [];
+
+		// Plain rows of blocks: keep the cheapest row per end.
 		const root: Path = {
 			template: -1,
 			parent: null,
@@ -223,33 +293,106 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 				}
 			}
 		}
-
 		for (let len = 1; len < byLength.length; len++) {
 			const end = start + len;
+			let bestPath: Path | null = null;
+			let bestCost = Infinity;
 			for (const path of byLength[len] ?? []) {
-				const total = base + fitRow(path, end === n).cost + path.choiceCost + variety(path);
-				if (total < (best[end] ?? Infinity)) {
-					best[end] = total;
-					choice[end] = path;
-					from[end] = start;
+				const cost = fitRow(path, end === n).cost + path.choiceCost + variety(path);
+				if (cost < bestCost) {
+					bestCost = cost;
+					bestPath = path;
+				}
+			}
+			if (bestPath) candidates.push({ end, cost: bestCost, band: { kind: 'row', path: bestPath } });
+		}
+
+		// Feature bands.
+		if (!options.singlesOnly) {
+			for (const k of FEATURE_ROWS) {
+				const lens = new Array<number>(k).fill(1);
+				const visit = (row: number, used: number): void => {
+					if (row === k) {
+						const end = start + 1 + used;
+						if (end > n) return;
+						const cost = fitFeature(start, lens);
+						if (cost < INFEASIBLE) {
+							candidates.push({ end, cost: cost + FEATURE_PENALTY, band: { kind: 'feature', lens: [...lens] } });
+						}
+						return;
+					}
+					for (let len = 1; len <= MAX_SUBROW_ITEMS; len++) {
+						if (start + 1 + used + len > n) break;
+						lens[row] = len;
+						visit(row + 1, used + len);
+					}
+				};
+				visit(0, 0);
+			}
+		}
+
+		for (let c = 0; c < states; c++) {
+			const base = best[start * states + c] ?? Infinity;
+			if (base === Infinity) continue;
+			for (const { end, cost, band } of candidates) {
+				let next: number;
+				let total = base + cost;
+				if (band.kind === 'feature') {
+					if (c < MIN_FEATURE_GAP && size(start) !== 2) continue;
+					next = 0;
+				} else {
+					next = Math.min(c + 1, states - 1);
+					if (c + 1 > MAX_FEATURE_GAP) total += LATE_FEATURE_PENALTY;
+				}
+				const slot = end * states + next;
+				if (total < (best[slot] ?? Infinity)) {
+					best[slot] = total;
+					backFrom[slot] = start;
+					backState[slot] = c;
+					backBand[slot] = band;
 				}
 			}
 		}
 	}
 
-	const rows: { start: number; path: Path; end: number }[] = [];
+	let state = 0;
+	for (let c = 1; c < states; c++) {
+		if ((best[n * states + c] ?? Infinity) < (best[n * states + state] ?? Infinity)) state = c;
+	}
+	const bands: { start: number; end: number; band: Band }[] = [];
 	for (let end = n; end > 0; ) {
-		const path = choice[end];
-		if (!path) break;
-		const start = from[end] ?? 0;
-		rows.push({ start, path, end });
+		const slot = end * states + state;
+		const band = backBand[slot];
+		const start = backFrom[slot] ?? -1;
+		if (!band || start < 0) break;
+		bands.push({ start, end, band });
+		state = backState[slot] ?? 0;
 		end = start;
 	}
-	rows.reverse();
+	bands.reverse();
 
 	const boxes: Box[] = new Array<Box>(n);
 	let y = 0;
-	for (const { start, path, end } of rows) {
+	let features = 0;
+	for (const { start, end, band } of bands) {
+		if (band.kind === 'feature') {
+			// Alternate the big tile between the left and right edges.
+			const rows: Tree[] = [];
+			let offset = 1;
+			for (const len of band.lens) {
+				rows.push({ dir: 'h', children: Array.from({ length: len }, (_, j) => offset + j) });
+				offset += len;
+			}
+			const column: Tree = { dir: 'v', children: rows };
+			const tree: Tree = { dir: 'h', children: features % 2 === 0 ? [0, column] : [column, 0] };
+			const lin = linear(tree, start, ratio, gap);
+			const height = (width + lin.b) / lin.a;
+			place(tree, start, { x: 0, y, width, height }, ratio, gap, boxes);
+			features++;
+			y += height + gap;
+			continue;
+		}
+		const { path } = band;
 		const { height, stretch, ragged } = fitRow(path, end === n);
 		let x = 0;
 		let i = start;
@@ -267,7 +410,7 @@ export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): Mo
 		y += height + gap;
 	}
 
-	return { boxes, height: rows.length > 0 ? y - gap : 0 };
+	return { boxes, height: bands.length > 0 ? y - gap : 0 };
 }
 
 /** Width = a * height - b for a subtree whose first tile is `first`. */
