@@ -1,5 +1,6 @@
 import { BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
 import { FillZoom } from '../zoom/fill';
+import { HoverPreview } from '../video/hover-preview';
 import type { Size } from '../media/dimensions';
 import { NoteSignals, areaWeights, incomingLinkCounts, relatednessScores } from '../media/importance';
 import { probeSize } from '../media/probe';
@@ -101,6 +102,7 @@ export class GalleryView extends BasesView {
 
 	private lastLayoutMs = 0;
 	private zoom: FillZoom | null = null;
+	private preview: HoverPreview | null = null;
 	private zoomHeldUpdate = false;
 	/** Items laid out so far (whole pages). */
 	private loaded = 0;
@@ -163,6 +165,13 @@ export class GalleryView extends BasesView {
 			}),
 		);
 		this.registerDomEvent(this.sizerEl, 'click', (evt) => this.onTileClick(evt));
+
+		this.preview = this.addChild(new HoverPreview(this.app));
+		this.registerDomEvent(this.sizerEl, 'pointerover', (evt) => this.onPointerOver(evt));
+		this.registerDomEvent(this.sizerEl, 'pointerleave', () => this.preview?.stop());
+		this.registerDomEvent(this.rootEl.doc, 'visibilitychange', () => {
+			if (this.rootEl.doc.hidden) this.preview?.stop();
+		});
 
 		this.bindScroll();
 		this.register(this.rootEl.onWindowMigrated(() => this.bindScroll()));
@@ -394,6 +403,25 @@ export class GalleryView extends BasesView {
 		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null, item.media.src);
 	}
 
+	/** Starts a preview on the video tile under the pointer, stops it elsewhere. */
+	private onPointerOver(evt: PointerEvent): void {
+		if (evt.pointerType === 'touch') return;
+		const target = evt.target;
+		const tileEl = target instanceof HTMLElement ? target.closest<HTMLElement>('.bases-gallery-tile') : null;
+		const tile = tileEl ? this.tileFor(tileEl) : null;
+		const item = tile ? this.items[tile.index] : undefined;
+		if (!tileEl || !item || item.media.kind !== 'video') {
+			this.preview?.stop();
+			return;
+		}
+		this.preview?.schedule(tileEl, item.media.src);
+	}
+
+	private tileFor(el: Element): Tile | null {
+		for (const tile of this.mounted.values()) if (tile.el === el) return tile;
+		return null;
+	}
+
 	/** Coalesces all work into one animation frame. */
 	private requestUpdate(relayout: boolean): void {
 		if (relayout) this.needsLayout = true;
@@ -516,6 +544,7 @@ export class GalleryView extends BasesView {
 		for (const [key, tile] of this.mounted) {
 			if (wanted.has(key)) continue;
 			this.mounted.delete(key);
+			if (this.preview?.host === tile.el) this.preview.stop();
 			tile.release();
 			this.pool.push(tile);
 		}

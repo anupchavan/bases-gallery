@@ -40,32 +40,33 @@ export class Tile {
 		this.thumbKey = thumbKey;
 		this.el.dataset.kind = media.kind;
 
-		if (media.kind === 'image') {
+		const img = this.ensureImg();
+		if (changed) {
+			this.el.removeClass('is-broken');
+			img.removeClass('is-loaded');
+			img.removeAttribute('src');
 			this.iconEl?.detach();
-			const img = this.ensureImg();
-			if (changed) {
-				this.el.removeClass('is-broken');
-				img.removeClass('is-loaded');
-				img.removeAttribute('src');
-			}
-			if (thumbKey === null) {
-				img.src = media.src;
-				return;
-			}
-			void thumbnail().then((url) => {
-				if (this.src !== media.src || this.thumbKey !== thumbKey) return;
-				img.src = url ?? media.src;
-			});
-		} else {
-			// Video posters arrive in a later milestone.
-			this.imgEl?.detach();
-			this.imgEl?.removeAttribute('src');
-			if (!this.iconEl) {
-				this.iconEl = createDiv('bases-gallery-tile-icon');
-				setIcon(this.iconEl, 'film');
-			}
-			this.el.appendChild(this.iconEl);
 		}
+		if (thumbKey === null) {
+			// An image shows its original; a video with no poster shows an icon.
+			if (media.kind === 'image') img.src = media.src;
+			else this.showVideoIcon();
+			return;
+		}
+		void thumbnail().then((url) => {
+			if (this.src !== media.src || this.thumbKey !== thumbKey) return;
+			if (url) img.src = url;
+			else if (media.kind === 'image') img.src = media.src;
+			else this.showVideoIcon();
+		});
+	}
+
+	private showVideoIcon(): void {
+		if (!this.iconEl) {
+			this.iconEl = createDiv('bases-gallery-tile-icon');
+			setIcon(this.iconEl, 'film');
+		}
+		this.el.appendChild(this.iconEl);
 	}
 
 	place(box: Box): void {

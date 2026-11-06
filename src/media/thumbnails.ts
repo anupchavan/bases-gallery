@@ -140,6 +140,7 @@ export class Thumbnails {
 	}
 
 	private async make(media: MediaSource, natural: Size | undefined, bucket: number): Promise<Blob | null> {
+		if (media.kind === 'video') return posterFrame(media.src, bucket);
 		const source = media.file
 			? new Blob([await this.app.vault.readBinary(media.file)])
 			: new Blob([(await requestUrl({ url: media.src })).arrayBuffer]);
@@ -189,9 +190,69 @@ export class Thumbnails {
 }
 
 function bucketFor(media: MediaSource, natural: Size | undefined, needPx: number): number | null {
-	if (media.kind !== 'image' || SKIP.test(media.src)) return null;
+	if (SKIP.test(media.src)) return null;
 	const bucket = BUCKETS.find((b) => b >= needPx) ?? BUCKETS[BUCKETS.length - 1] ?? 2048;
+	// A video always needs a poster; never larger than its own frame.
+	if (media.kind === 'video') {
+		const largest = natural ? Math.max(natural.width, natural.height) : bucket;
+		return BUCKETS.find((b) => b >= Math.min(bucket, largest)) ?? bucket;
+	}
 	// Small originals are already cheap: show them as they are.
 	if (natural && Math.max(natural.width, natural.height) <= bucket * 1.25) return null;
 	return bucket;
+}
+
+/** How long a poster may take before the tile keeps its placeholder. */
+const POSTER_TIMEOUT_MS = 8000;
+
+/**
+ * Grabs a frame near the start of a video and encodes it as WebP, scaled so
+ * its longest side is at most `bucket`. The video is requested with CORS:
+ * Obsidian's vault resource URLs allow it, and remote hosts need to send
+ * CORS headers, or this returns null and the tile shows a placeholder.
+ */
+function posterFrame(src: string, bucket: number): Promise<Blob | null> {
+	return new Promise((resolve) => {
+		const video = createEl('video');
+		video.muted = true;
+		video.preload = 'auto';
+		video.playsInline = true;
+		// Vault resource URLs count as another origin too; both they and CORS-enabled
+		// remote hosts allow reading frames when the request is made with CORS.
+		video.crossOrigin = 'anonymous';
+		let done = false;
+		const finish = (blob: Blob | null): void => {
+			if (done) return;
+			done = true;
+			window.clearTimeout(timer);
+			video.removeAttribute('src');
+			video.load();
+			resolve(blob);
+		};
+		const timer = window.setTimeout(() => finish(null), POSTER_TIMEOUT_MS);
+		video.onerror = () => finish(null);
+		video.onloadedmetadata = () => {
+			// A few frames in: the very first frame is often black.
+			video.currentTime = Math.min(0.5, (video.duration || 1) / 3);
+		};
+		video.onseeked = () => {
+			const width = video.videoWidth;
+			const height = video.videoHeight;
+			if (!width || !height) return finish(null);
+			const scale = Math.min(1, bucket / Math.max(width, height));
+			const canvas = new OffscreenCanvas(Math.round(width * scale), Math.round(height * scale));
+			const context = canvas.getContext('2d');
+			if (!context) return finish(null);
+			try {
+				context.drawImage(video, 0, 0, canvas.width, canvas.height);
+				void canvas
+					.convertToBlob({ type: 'image/webp', quality: QUALITY })
+					.then(finish, () => finish(null));
+			} catch {
+				// A cross-origin frame without CORS taints the canvas.
+				finish(null);
+			}
+		};
+		video.src = src;
+	});
 }
