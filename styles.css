@@ -342,6 +342,8 @@ video.bases-gallery-zoom-media {
 .bases-gallery-zoom-stage {
 	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
 	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
+	/* The least space kept beside a filled photo or video. */
+	--bases-gallery-zoom-margin-x: var(--size-4-4);
 	--bases-gallery-radius: var(--radius-s);
 	--bases-gallery-chip-icon: var(--icon-xs);
 	/* The icon plus padding on each side. */

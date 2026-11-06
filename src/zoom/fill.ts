@@ -71,6 +71,8 @@ export class FillZoom extends Component {
 	private natural = { width: 0, height: 0 };
 	/** Space kept above and below the media, from --bases-gallery-zoom-margin. */
 	private margin = 0;
+	/** The least space kept beside the media, from --bases-gallery-zoom-margin-x. */
+	private marginX = 0;
 	private scope: Scope | null = null;
 	private closing = false;
 	private wheelTimer = 0;
@@ -120,6 +122,7 @@ export class FillZoom extends Component {
 		const tileStyle = tileEl.win.getComputedStyle(tileEl);
 		const px = (name: string): number => parseFloat(tileStyle.getPropertyValue(name)) || 0;
 		this.margin = px('--bases-gallery-zoom-margin');
+		this.marginX = px('--bases-gallery-zoom-margin-x');
 		this.detailsRoom = px('--bases-gallery-details-width') + 2 * px('--bases-gallery-details-gap');
 		const base: Rect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 
@@ -303,16 +306,19 @@ export class FillZoom extends Component {
 		if (!box || !stage || !overlay || !base) return;
 		// Read from the window and the tile, not the new elements: reading
 		// those would force a style and layout pass in the opening frame.
-		const margin = this.isFullscreen() ? 0 : this.margin;
+		const full = this.isFullscreen();
+		const margin = full ? 0 : this.margin;
+		const marginX = full ? 0 : this.marginX;
 		const viewW = box.win.innerWidth;
 		const viewH = box.win.innerHeight;
+		const roomW = Math.max(1, viewW - 2 * marginX);
 		const roomH = Math.max(1, viewH - 2 * margin);
 		// The media's shape at the tile's size, covering the tile.
 		const ratio = natural.width / natural.height;
 		const startW = Math.max(base.width, base.height * ratio);
 		const startH = startW / ratio;
 		const upscale = this.cloneEl instanceof HTMLVideoElement;
-		const capW = upscale ? viewW : Math.min(Math.max(startW, natural.width), viewW);
+		const capW = upscale ? roomW : Math.min(Math.max(startW, natural.width), roomW);
 		const capH = upscale ? roomH : Math.min(Math.max(startH, natural.height), roomH);
 		const scale = Math.min(capW / startW, capH / startH);
 		const width = startW * scale;
