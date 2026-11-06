@@ -1,6 +1,6 @@
 # Bases Gallery
 
-An Obsidian plugin that adds a **Gallery** layout to [Bases](https://help.obsidian.md/bases): your notes' photos and videos as a mosaic or justified rows, with MUBI-style zoom, Netflix-style hover previews and a video player.
+An Obsidian plugin that adds a **Gallery** layout to [Bases](https://help.obsidian.md/bases): your notes' photos, videos and PDFs as a mosaic or justified rows, with MUBI-style zoom, Netflix-style hover previews and a video player.
 
 Requires Obsidian 1.13.0 or later, with **Bases** turned on in **Settings → Core plugins**.
 
@@ -61,7 +61,7 @@ Video keys while zoomed:
 
 ### Supported files
 
-Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). HDR photos and videos are detected; **Settings → Bases Gallery → HDR in tiles** chooses whether tiles show them in HDR.
+Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, MKV (what plays depends on the codecs Obsidian's Chromium supports). PDFs in your vault show their first page and open in Obsidian's own PDF viewer. HDR photos and videos are detected; **Settings → Bases Gallery → HDR in tiles** chooses whether tiles show them in HDR.
 
 ## Performance and privacy
 
