@@ -413,8 +413,8 @@ export class GalleryView extends BasesView {
 	}
 
 	/**
-	 * A click fills the window with the image, video or PDF. Cmd/Ctrl-click (or middle
-	 * click) opens the note instead, like a link.
+	 * A click fills the window with the image, video or PDF. Cmd/Ctrl-click
+	 * opens the note instead, like a link.
 	 */
 	private onTileClick(evt: MouseEvent): void {
 		const target = evt.targetNode;
