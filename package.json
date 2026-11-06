@@ -1,6 +1,6 @@
 {
 	"name": "media-manager",
-	"version": "0.1.0",
+	"version": "0.0.1",
 	"description": "Manage media files as Markdown notes.",
 	"main": "main.js",
 	"type": "module",
