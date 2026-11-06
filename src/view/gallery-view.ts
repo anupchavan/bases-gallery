@@ -109,6 +109,8 @@ export class GalleryView extends BasesView {
 	private zoomHeldUpdate = false;
 	/** The item in the open zoom. */
 	private zoomIndex = -1;
+	/** Drops a step whose image finished decoding after a newer step began. */
+	private stepToken = 0;
 	/** Items laid out so far (whole pages). */
 	private loaded = 0;
 	private loadingMore = false;
@@ -434,7 +436,7 @@ export class GalleryView extends BasesView {
 	}
 
 	/** Fills the window with a tile's media, or swaps it into the open zoom. */
-	private openZoom(tile: Tile, replace: boolean): void {
+	private openZoom(tile: Tile, replace: boolean, decoded = false): void {
 		const item = this.items[tile.index];
 		if (!item) return;
 		this.zoomIndex = tile.index;
@@ -446,7 +448,8 @@ export class GalleryView extends BasesView {
 			el,
 			{ kind, src, width: size?.width ?? 0, height: size?.height ?? 0, file: item.media.file, sourcePath: item.file.path },
 			{
-				shown: tile.image,
+				// A decoded original goes straight in, without the thumbnail first.
+				shown: decoded ? null : tile.image,
 				scroller: this.scrollers[0] ?? null,
 				replace,
 				step: (delta) => this.step(delta),
@@ -473,10 +476,26 @@ export class GalleryView extends BasesView {
 	 * shrinks it back onto that tile.
 	 */
 	step(delta: number): void {
-		const next = this.stepTarget(delta);
+		void this.stepTo(this.stepTarget(delta));
+	}
+
+	private async stepTo(next: number): Promise<void> {
 		const box = this.layout?.boxes[next];
 		const item = this.items[next];
 		if (next < 0 || !box || !item) return;
+		// The current photo stays up until the next one is decoded, so the
+		// switch happens in one frame with nothing blank in between.
+		const token = ++this.stepToken;
+		if (item.media.kind === 'image') {
+			const img = createEl('img');
+			img.src = item.media.src;
+			try {
+				await img.decode();
+			} catch {
+				// Shown as it loads instead.
+			}
+			if (token !== this.stepToken || !this.zoom?.isOpen || this.zoom.isClosing) return;
+		}
 		const scroller = this.scrollers[0];
 		if (scroller) {
 			const top = this.sizerEl.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop + box.y;
@@ -485,7 +504,7 @@ export class GalleryView extends BasesView {
 		}
 		this.renderVisible();
 		const tile = this.mounted.get(item.key);
-		if (tile) this.openZoom(tile, true);
+		if (tile) this.openZoom(tile, true, item.media.kind === 'image');
 	}
 
 	/** Re-shows every tile, for a changed plugin setting. */

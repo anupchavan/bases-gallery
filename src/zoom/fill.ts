@@ -167,9 +167,9 @@ export class FillZoom extends Component {
 		const stage = kept?.stage ?? doc.body.createDiv('media-manager-zoom-stage');
 		const box = stage.createDiv('media-manager-zoom-box');
 		if (kept) {
-			// Already in place: no growing, just a short fade of the new media.
+			// Already in place: no growing and no fade.
 			stage.addClass('is-swapping');
-			box.addClass('is-open', 'is-swapped');
+			box.addClass('is-open');
 		}
 		const clone =
 			media.kind === 'video'

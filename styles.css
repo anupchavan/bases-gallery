@@ -692,18 +692,8 @@ body {
 	display: none;
 }
 
-/* Previous / next: the new media replaces the old in place, with a short fade. */
+/* Previous / next: the new media replaces the old in place, with no animation. */
 .media-manager-zoom-stage.is-swapping .media-manager-zoom-box,
 .media-manager-zoom-stage.is-swapping .media-manager-zoom-media {
 	transition: none;
-}
-
-.media-manager-zoom-box.is-swapped .media-manager-zoom-media {
-	animation: media-manager-swap-in var(--media-manager-preview-fade-out) ease-out;
-}
-
-@keyframes media-manager-swap-in {
-	from {
-		opacity: 0;
-	}
 }
