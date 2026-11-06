@@ -11,6 +11,7 @@ import {
 	getLinkpath,
 } from 'obsidian';
 import { resolveMediaText } from '../media/resolve';
+import type { MediaNoteFilter } from './media-note-filter';
 
 /** `![[target#sub|alias]]`: the target and the alias (size or caption). */
 const EMBED = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
@@ -25,6 +26,7 @@ export class MediaNoteEmbeds extends Component {
 	constructor(
 		readonly app: App,
 		private readonly property: () => string,
+		private readonly filter: MediaNoteFilter,
 		private readonly registerPostProcessor: (processor: (el: HTMLElement, ctx: MarkdownPostProcessorContext) => void) => void,
 		private readonly registerEditorExtension: (extension: Extension) => void,
 	) {
@@ -47,7 +49,8 @@ export class MediaNoteEmbeds extends Component {
 		const value: unknown = this.app.metadataCache.getFileCache(note)?.frontmatter?.[property];
 		const raw = Array.isArray(value) ? (value as unknown[])[0] : value;
 		if (typeof raw !== 'string') return null;
-		return resolveMediaText(this.app, raw, note)?.file ?? null;
+		const media = resolveMediaText(this.app, raw, note)?.file ?? null;
+		return media && this.filter.matches(note) ? media : null;
 	}
 
 	/**

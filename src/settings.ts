@@ -1,5 +1,7 @@
 import { App, PluginSettingTab, SettingDefinitionItem } from 'obsidian';
 import type MediaManagerPlugin from './main';
+import type { BasesFilter } from './embeds/bases-filters';
+import { mountFilterEditor } from './embeds/media-note-filter';
 
 export interface GallerySettings {
 	/** Show HDR photos and video posters in HDR inside tiles (HDR displays only). */
@@ -8,12 +10,15 @@ export interface GallerySettings {
 	zoomNoteImages: boolean;
 	/** The property that makes a note a media note: it links to the note's photo, video or PDF. */
 	mediaNoteProperty: string;
+	/** Which notes are media notes, as Bases filters. Null: every note. */
+	mediaNoteFilters: BasesFilter | null;
 }
 
 export const DEFAULT_SETTINGS: GallerySettings = {
 	hdrTiles: true,
 	zoomNoteImages: true,
 	mediaNoteProperty: 'url',
+	mediaNoteFilters: null,
 };
 
 /** Declarative settings (Obsidian 1.13): Obsidian renders, indexes and saves them. */
@@ -39,8 +44,16 @@ export class GallerySettingTab extends PluginSettingTab {
 			},
 			{
 				name: 'Media note property',
-				desc: 'Notes whose property links to a photo, video or PDF embed as that file. Leave empty to turn off.',
+				desc: 'Media notes embed as the photo, video or PDF this property links to. Leave empty to turn off.',
 				control: { type: 'text', key: 'mediaNoteProperty', placeholder: 'url' },
+			},
+			{
+				name: 'Media notes',
+				desc: 'Notes that match these filters are media notes. No filters: every note with the property.',
+				render: (setting) =>
+					mountFilterEditor(this.app, setting, this.plugin.settings.mediaNoteFilters, (filters) => {
+						void this.setControlValue('mediaNoteFilters', filters);
+					}),
 			},
 		];
 	}
@@ -48,5 +61,6 @@ export class GallerySettingTab extends PluginSettingTab {
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		await super.setControlValue(key, value);
 		this.plugin.settingsChanged();
+		if (key === 'mediaNoteProperty' || key === 'mediaNoteFilters') this.plugin.redrawNotes();
 	}
 }

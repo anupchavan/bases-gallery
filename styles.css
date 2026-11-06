@@ -702,3 +702,13 @@ body {
 .media-manager-note-embed > p {
 	margin: 0;
 }
+
+/* Bases' own filter editor, full width under its settings row. */
+.media-manager-filter-setting {
+	flex-wrap: wrap;
+}
+
+.media-manager-filter-editor {
+	flex-basis: 100%;
+	padding-top: var(--size-4-2);
+}

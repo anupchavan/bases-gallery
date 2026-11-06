@@ -67,7 +67,7 @@ Images in your notes open with the same zoom instead of Obsidian's image viewer.
 
 ### Media notes
 
-A note whose `url` property links to a photo, video or PDF in your vault is a media note. Embedding it (`![[Sunset]]`) shows the media itself, like embedding the file, without the note's title, border or open link. Sizes work as usual: `![[Sunset|300]]`. Change or clear the property in **Settings → Media Manager → Media note property**.
+A note whose `url` property links to a photo, video or PDF in your vault is a media note. Embedding it (`![[Sunset]]`) shows the media itself, like embedding the file, without the note's title, border or open link. Sizes work as usual: `![[Sunset|300]]`. Change or clear the property in **Settings → Media Manager → Media note property**. To limit media notes to some notes (say, those whose `categories` contain `[[Photos]]`), add Bases filters under **Media notes** in the same settings.
 
 ### Supported files
 

@@ -1,4 +1,4 @@
-import { Events, Plugin } from 'obsidian';
+import { Events, MarkdownView, Plugin } from 'obsidian';
 import { releasePdfWorker } from './media/pdf';
 import { DEFAULT_SETTINGS, GallerySettingTab, GallerySettings } from './settings';
 import { GALLERY_VIEW_TYPE, GalleryView } from './view/gallery-view';
@@ -11,6 +11,7 @@ export interface Stepper {
 import { galleryViewOptions } from './view/options';
 import { NoteImageZoom } from './zoom/note-images';
 import { MediaNoteEmbeds } from './embeds/media-notes';
+import { MediaNoteFilter } from './embeds/media-note-filter';
 
 export default class MediaManagerPlugin extends Plugin {
 	settings: GallerySettings = { ...DEFAULT_SETTINGS };
@@ -32,6 +33,11 @@ export default class MediaManagerPlugin extends Plugin {
 			new MediaNoteEmbeds(
 				this.app,
 				() => this.settings.mediaNoteProperty.trim(),
+				new MediaNoteFilter(
+					this.app,
+					() => this.settings.mediaNoteFilters,
+					() => this.redrawNotes(),
+				),
 				(processor) => this.registerMarkdownPostProcessor(processor),
 				(extension) => this.registerEditorExtension(extension),
 			),
@@ -65,6 +71,13 @@ export default class MediaManagerPlugin extends Plugin {
 		if (!stepper || stepper.stepTarget(delta) < 0) return false;
 		if (!checking) stepper.step(delta);
 		return true;
+	}
+
+	/** Redraws open notes in reading view, so their media notes show. */
+	redrawNotes(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
+			if (leaf.view instanceof MarkdownView) leaf.view.previewMode.rerender(true);
+		}
 	}
 
 	/** Lets open galleries pick up a changed setting. */
