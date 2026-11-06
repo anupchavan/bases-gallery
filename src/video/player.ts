@@ -7,6 +7,9 @@ const SEEK_SMALL = 5;
 const SEEK_LARGE = 10;
 const VOLUME_STEP = 0.1;
 /** Local-storage key for the mute state, shared with the hover preview. */
+/** Numbers the seek bars' labels, so each id is unique. */
+let seekLabels = 0;
+
 export const MUTED_KEY = 'media-manager-muted';
 
 export interface PlayerHost {
@@ -53,7 +56,13 @@ export class VideoControls extends Component {
 		// YouTube's layout: the scrub bar across the full width, and under it
 		// a row of play, mute and time on the left, fullscreen on the right.
 		this.el = parentEl.createDiv('media-manager-controls');
-		this.trackEl = this.el.createDiv({ cls: 'media-manager-control-track', attr: { role: 'slider', tabindex: '0', 'aria-label': 'Seek' } });
+		// Named by a hidden label: an aria-label would also show as a tooltip.
+		const labelId = `media-manager-seek-${++seekLabels}`;
+		this.el.createSpan({ cls: 'media-manager-sr-only', text: 'Seek', attr: { id: labelId } });
+		this.trackEl = this.el.createDiv({
+			cls: 'media-manager-control-track',
+			attr: { role: 'slider', tabindex: '0', 'aria-labelledby': labelId },
+		});
 		this.bufferedEl = this.trackEl.createDiv('media-manager-control-buffered');
 		this.playedEl = this.trackEl.createDiv('media-manager-control-played');
 		this.rowEl = this.el.createDiv('media-manager-controls-row');
@@ -96,7 +105,7 @@ export class VideoControls extends Component {
 
 	onunload(): void {
 		this.alive = false;
-		window.clearTimeout(this.idleTimer);
+		this.el.win.clearTimeout(this.idleTimer);
 		this.el.win.cancelAnimationFrame(this.frame);
 	}
 
@@ -128,17 +137,17 @@ export class VideoControls extends Component {
 	 */
 	wake(): void {
 		this.idleEl.removeClass('is-idle');
-		window.clearTimeout(this.idleTimer);
+		this.el.win.clearTimeout(this.idleTimer);
 		this.loop();
 		if (this.video.paused && this.hovered) return;
-		this.idleTimer = window.setTimeout(() => {
+		this.idleTimer = this.el.win.setTimeout(() => {
 			if ((this.video.paused && this.hovered) || this.scrubbing) return;
 			this.hide();
 		}, IDLE_HIDE_MS);
 	}
 
 	private hide(): void {
-		window.clearTimeout(this.idleTimer);
+		this.el.win.clearTimeout(this.idleTimer);
 		this.idleEl.addClass('is-idle');
 	}
 

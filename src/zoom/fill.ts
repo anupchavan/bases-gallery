@@ -97,6 +97,8 @@ export class FillZoom extends Component {
 	private wheelTimer = 0;
 	private refitTimer = 0;
 	private darkTimer = 0;
+	/** The window the zoom is open in. */
+	private win: Window = window;
 	/** The info button's state; kept from one zoom to the next. */
 	private detailsOn = false;
 	private infoEl: HTMLElement | null = null;
@@ -134,6 +136,8 @@ export class FillZoom extends Component {
 		const replacing = options.replace === true && this.isOpen && !this.closing;
 		if ((this.isOpen && !replacing) || !tileEl.isConnected) return;
 		const doc = tileEl.doc;
+		// Timers run on the zoom's own window: a hidden main window would slow them.
+		if (!replacing) this.win = tileEl.win;
 		const rect = tileEl.getBoundingClientRect();
 		if (rect.width === 0 || rect.height === 0) return;
 
@@ -218,7 +222,7 @@ export class FillZoom extends Component {
 			return false;
 		});
 
-		if (clone instanceof HTMLVideoElement) {
+		if (clone.instanceOf(HTMLVideoElement)) {
 			const controls = session.addChild(
 				new VideoControls(
 					box,
@@ -254,7 +258,8 @@ export class FillZoom extends Component {
 			if (evt.target === box && evt.propertyName === 'width') ready();
 		});
 		// No transition runs with reduced motion or in a hidden window.
-		session.registerInterval(window.setTimeout(ready, DURATION_MS + 50));
+		const readyTimer = this.win.setTimeout(ready, DURATION_MS + 50);
+		session.register(() => this.win.clearTimeout(readyTimer));
 
 		this.fit();
 		// Let the start position paint, then switch on the open state so the
@@ -278,13 +283,13 @@ export class FillZoom extends Component {
 			let scrolled = 0;
 			const forward = (evt: WheelEvent): void => {
 				// The details panel and the PDF viewer scroll themselves.
-				const target = evt.target as Node;
+				const target = evt.targetNode;
 				if (this.isFullscreen() || this.detailsEl?.contains(target) || this.pdfEl?.contains(target)) return;
 				evt.preventDefault();
 				scroller.scrollTop += evt.deltaY;
 				scrolled += Math.abs(evt.deltaY);
 				if (scrolled > SCROLL_CLOSE_PX && !this.wheelTimer) {
-					this.wheelTimer = window.setTimeout(() => this.close(), SCROLL_CLOSE_DELAY_MS);
+					this.wheelTimer = this.win.setTimeout(() => this.close(), SCROLL_CLOSE_DELAY_MS);
 				}
 			};
 			session.registerDomEvent(overlay, 'wheel', forward, { passive: false });
@@ -304,7 +309,7 @@ export class FillZoom extends Component {
 		if (!clone || !box || !overlay || this.closing) return;
 		this.closing = true;
 		if (this.isFullscreen()) void box.doc.exitFullscreen();
-		if (clone instanceof HTMLVideoElement) clone.pause();
+		if (clone.instanceOf(HTMLVideoElement)) clone.pause();
 		// Shrinks back as the thumbnail; the viewer is unloaded once closed.
 		this.pdfEl?.removeClass('is-loaded');
 		this.stageEl?.removeClass('is-ready');
@@ -320,7 +325,7 @@ export class FillZoom extends Component {
 			if (evt.target === box && evt.propertyName === 'width') finish();
 		});
 		// Fallback when no transition runs (reduced motion, hidden window).
-		window.setTimeout(finish, DURATION_MS + 50);
+		this.win.setTimeout(finish, DURATION_MS + 50);
 	}
 
 	private imageClone(box: HTMLElement, media: ZoomMedia, shown: HTMLImageElement | null): HTMLImageElement {
@@ -357,9 +362,8 @@ export class FillZoom extends Component {
 	private showPdf(session: Component, box: HTMLElement, media: ZoomMedia): void {
 		const file = media.file;
 		if (!file || this.pdfEl) return;
-		const el = createDiv('media-manager-zoom-pdf');
-		// Under the info button.
-		box.insertBefore(el, this.infoEl);
+		// The info button is on the stage, above the box, so this stays under it.
+		const el = box.createDiv('media-manager-zoom-pdf');
 		this.pdfEl = el;
 		const height = Math.max(1, Math.floor(this.frameHeight));
 		const owner = session.addChild(new Component());
@@ -436,8 +440,8 @@ export class FillZoom extends Component {
 		if (!stage || this.closing) return;
 		stage.addClass('is-refitting');
 		this.fit();
-		window.clearTimeout(this.refitTimer);
-		this.refitTimer = window.setTimeout(() => {
+		this.win.clearTimeout(this.refitTimer);
+		this.refitTimer = this.win.setTimeout(() => {
 			if (this.stageEl !== stage) return;
 			stage.removeClass('is-refitting');
 			// Back from fullscreen and the window has settled: fade the page
@@ -483,18 +487,18 @@ export class FillZoom extends Component {
 			this.revealDetails();
 		};
 		const enter = (): void => {
-			window.clearTimeout(leaveTimer);
+			this.win.clearTimeout(leaveTimer);
 			peek(true);
 		};
 		// A short grace, so the pointer can cross the gap to the panel.
 		const leave = (): void => {
-			window.clearTimeout(leaveTimer);
-			leaveTimer = window.setTimeout(() => {
+			this.win.clearTimeout(leaveTimer);
+			leaveTimer = this.win.setTimeout(() => {
 				held = false;
 				peek(false);
 			}, PEEK_GRACE_MS);
 		};
-		session.register(() => window.clearTimeout(leaveTimer));
+		session.register(() => this.win.clearTimeout(leaveTimer));
 		for (const el of [info, panel]) {
 			session.registerDomEvent(el, 'pointerenter', enter);
 			session.registerDomEvent(el, 'pointerleave', leave);
@@ -509,12 +513,12 @@ export class FillZoom extends Component {
 		});
 		session.registerDomEvent(panel, 'click', (evt) => {
 			// Following a link leaves the gallery, so close the zoom behind it.
-			if (evt.target instanceof Element && evt.target.closest('a')) this.close();
+			if (evt.targetNode?.instanceOf(Element) && evt.targetNode.closest('a')) this.close();
 		});
 		this.scope?.register([], 'i', (evt) => {
 			// Typing in a field (the PDF viewer's search, say) is left alone.
-			const target = evt.target;
-			if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea'))) return true;
+			const target = evt.targetNode;
+			if (target?.instanceOf(HTMLElement) && (target.isContentEditable || target.closest('input, textarea'))) return true;
 			this.showDetails(!this.detailsOn);
 			return false;
 		});
@@ -555,7 +559,7 @@ export class FillZoom extends Component {
 			return;
 		}
 		this.setDark(true);
-		this.darkTimer = window.setTimeout(() => {
+		this.darkTimer = this.win.setTimeout(() => {
 			this.darkTimer = 0;
 			if (this.stageEl !== stage || this.closing) return;
 			stage.requestFullscreen().catch(() => this.setDark(false));
@@ -583,15 +587,15 @@ export class FillZoom extends Component {
 
 	/** Frees the current media and everything that belongs to it. */
 	private releaseMedia(): void {
-		if (this.wheelTimer) window.clearTimeout(this.wheelTimer);
+		if (this.wheelTimer) this.win.clearTimeout(this.wheelTimer);
 		this.wheelTimer = 0;
-		window.clearTimeout(this.refitTimer);
+		this.win.clearTimeout(this.refitTimer);
 		if (this.scope) this.app.keymap.popScope(this.scope);
 		this.scope = null;
 		if (this.session) this.removeChild(this.session);
 		this.session = null;
 		const clone = this.cloneEl;
-		if (clone instanceof HTMLVideoElement) {
+		if (clone?.instanceOf(HTMLVideoElement)) {
 			// Free the decoder and its buffers.
 			clone.pause();
 			clone.removeAttribute('src');
@@ -610,7 +614,7 @@ export class FillZoom extends Component {
 
 	private cleanUp(): void {
 		this.releaseMedia();
-		window.clearTimeout(this.darkTimer);
+		this.win.clearTimeout(this.darkTimer);
 		this.darkTimer = 0;
 		this.overlayEl?.detach();
 		this.stageEl?.detach();

@@ -406,8 +406,8 @@ export class GalleryView extends BasesView {
 	 * click) opens the note instead, like a link.
 	 */
 	private onTileClick(evt: MouseEvent): void {
-		const target = evt.target;
-		if (!(target instanceof HTMLElement)) return;
+		const target = evt.targetNode;
+		if (!target?.instanceOf(HTMLElement)) return;
 		const tileEl = target.closest('.media-manager-tile');
 		if (!tileEl) return;
 		let tile: Tile | null = null;
@@ -491,8 +491,8 @@ export class GalleryView extends BasesView {
 	/** Starts a preview on the video tile under the pointer, stops it elsewhere. */
 	private onPointerOver(evt: PointerEvent): void {
 		if (evt.pointerType === 'touch') return;
-		const target = evt.target;
-		const tileEl = target instanceof HTMLElement ? target.closest<HTMLElement>('.media-manager-tile') : null;
+		const target = evt.targetNode;
+		const tileEl = target?.instanceOf(HTMLElement) ? target.closest<HTMLElement>('.media-manager-tile') : null;
 		const tile = tileEl ? this.tileFor(tileEl) : null;
 		const item = tile ? this.items[tile.index] : undefined;
 		if (!tileEl || !item || item.media.kind !== 'video') {
@@ -686,7 +686,7 @@ export class GalleryView extends BasesView {
 	private maxTileHeight(): number {
 		const scroller = this.scrollers[0];
 		const visible = scroller ? scroller.clientHeight : this.rootEl.win.innerHeight;
-		const style = getComputedStyle(this.rootEl);
+		const style = this.rootEl.win.getComputedStyle(this.rootEl);
 		const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
 		return Math.max(MIN_TILE_PX, visible - padding);
 	}
@@ -740,8 +740,9 @@ export class GalleryView extends BasesView {
 		const pane = this.scrollers[0];
 		if (pane) this.resizeObserver?.observe(pane);
 		const onScroll = (evt: Event): void => {
+			// Scroll events aren't UI events, so no targetNode; any window's Node works here.
 			const target = evt.target;
-			if (target instanceof Node && target.contains(this.rootEl)) {
+			if (target !== null && 'nodeType' in target && (target as Node).contains(this.rootEl)) {
 				this.requestUpdate(false);
 			}
 		};
@@ -786,7 +787,7 @@ function scrollingAncestors(el: HTMLElement): HTMLElement[] {
 		node && node !== el.doc.body;
 		node = node.parentElement
 	) {
-		const { overflowY } = getComputedStyle(node);
+		const { overflowY } = node.win.getComputedStyle(node);
 		if (overflowY === 'auto' || overflowY === 'scroll') out.push(node);
 	}
 	return out;

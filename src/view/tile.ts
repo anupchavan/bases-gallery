@@ -103,7 +103,7 @@ export class Tile {
 	}
 
 	private showIcon(kind: 'video' | 'pdf'): void {
-		this.iconEl ??= createDiv('media-manager-tile-icon');
+		this.iconEl ??= this.el.createDiv('media-manager-tile-icon');
 		if (this.iconKind !== kind) {
 			setIcon(this.iconEl, kind === 'pdf' ? 'file-text' : 'film');
 			this.iconKind = kind;
@@ -120,7 +120,7 @@ export class Tile {
 			this.durationEl?.detach();
 			return;
 		}
-		this.durationEl ??= createDiv('media-manager-duration');
+		this.durationEl ??= this.el.createDiv('media-manager-duration');
 		this.durationEl.setText(formatDuration(seconds));
 		if (this.durationEl.parentElement !== this.el) this.el.appendChild(this.durationEl);
 	}
@@ -132,7 +132,7 @@ export class Tile {
 			return;
 		}
 		if (!this.pagesEl || !this.pagesTextEl) {
-			this.pagesEl = createDiv('media-manager-duration media-manager-pages');
+			this.pagesEl = this.el.createDiv('media-manager-duration media-manager-pages');
 			setIcon(this.pagesEl.createSpan('media-manager-pages-icon'), 'file-text');
 			this.pagesTextEl = this.pagesEl.createSpan();
 		}
