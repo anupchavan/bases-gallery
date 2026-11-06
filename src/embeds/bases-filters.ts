@@ -20,7 +20,10 @@ export interface NativeQuery {
 	views: NativeViewConfig[];
 	saveFn?: () => void;
 	getViewConfig(name: string): NativeViewConfig;
-	setGlobalFilters(filters: BasesFilter | null): void;
+	/** Before 1.15.1. */
+	setGlobalFilters?(filters: BasesFilter | null): void;
+	/** 1.15.1 and later: the base's filters, a view's name and that view's filters. */
+	setFilters?(filters: BasesFilter | null, viewName: string, viewFilters: BasesFilter | null): void;
 }
 export interface NativeBuilder {
 	innerContainerEl: HTMLElement;
@@ -152,9 +155,16 @@ async function discover(app: App): Promise<NativeBasesApi> {
 				controller.ctx = controller.buildBasesContext();
 				builder.updateQuery(value => {
 					if (disposed) return;
-					query.setGlobalFilters(value);
-					controller.ctx = controller.buildBasesContext();
+					// Save first: Bases calls this inside a try/catch that hides
+					// errors, so anything below that throws must not lose the edit.
 					save(value);
+					// Keep the editor's own query in step, for its suggestions.
+					// 1.15.1 replaced setGlobalFilters with setFilters(base, view, viewFilters).
+					cleanup(() => {
+						if (typeof query.setGlobalFilters === "function") query.setGlobalFilters(value);
+						else query.setFilters?.(value, "Rules", null);
+						controller.ctx = controller.buildBasesContext();
+					});
 				}, query.getViewConfig("Rules"), query.filters);
 				if (Platform.isMobile || popover) {
 					const menu = controller.filterMenu;
