@@ -6,6 +6,7 @@ import { globalIgnores, defineConfig } from 'eslint/config';
 export default defineConfig(
 	globalIgnores([
 		'node_modules',
+		'.claude',
 		'dist',
 		'esbuild.config.mjs',
 		'stylelint.config.mjs',
