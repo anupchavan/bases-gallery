@@ -1,6 +1,5 @@
 .bases-gallery {
 	--bases-gallery-gap: var(--size-4-2);
-	--bases-gallery-radius: var(--radius-s);
 	--bases-gallery-fade-duration: 150ms;
 
 	padding: var(--bases-cards-group-padding, var(--size-4-3));
@@ -141,7 +140,7 @@
 	width: var(--zoom-width);
 	height: var(--zoom-height);
 	overflow: hidden;
-	border-radius: var(--bases-gallery-radius, var(--radius-s));
+	border-radius: var(--bases-gallery-radius);
 	pointer-events: auto;
 	cursor: zoom-out;
 	/* Scrolling the pane underneath moves the box with the page. */
@@ -183,8 +182,9 @@ video.bases-gallery-zoom-media {
 	cursor: default;
 }
 
-.bases-gallery-zoom-stage.is-dark .bases-gallery-zoom-box {
-	border-radius: 0;
+.bases-gallery-zoom-stage.is-dark {
+	/* Square corners for the media and, through it, the chips. */
+	--bases-gallery-radius: 0px;
 }
 
 .bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
@@ -223,7 +223,8 @@ video.bases-gallery-zoom-media {
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
-	padding: var(--size-4-16) var(--size-4-3) var(--size-4-3);
+	/* The corner buttons sit the same gap from the edge as every chip. */
+	padding: var(--size-4-16) var(--bases-gallery-chip-inset) var(--bases-gallery-chip-inset);
 	background: linear-gradient(transparent, color-mix(in oklch, black 50%, transparent) 50%, color-mix(in oklch, black 80%, transparent));
 	color: white;
 	opacity: 0;
@@ -320,8 +321,10 @@ video.bases-gallery-zoom-media {
 .bases-gallery-zoom-stage {
 	/* Space kept above and below a filled image: clears the title bar and the window buttons. */
 	--bases-gallery-zoom-margin: var(--header-height, var(--size-4-12));
-	--bases-gallery-chip-size: calc(var(--icon-s) + var(--size-4-3));
-	--bases-gallery-chip-inset: var(--size-4-2);
+	--bases-gallery-radius: var(--radius-s);
+	--bases-gallery-chip-size: calc(var(--icon-s) + var(--size-4-2));
+	/* Gap between a chip and the media's edge. */
+	--bases-gallery-chip-inset: var(--size-2-1);
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
 	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
 	/* The tile edge's hairline: --mono-100 is dark in light themes, light in dark ones. */
@@ -329,9 +332,9 @@ video.bases-gallery-zoom-media {
 	/* Properties panel beside a zoomed photo or video. */
 	--bases-gallery-details-width: 288px;
 	--bases-gallery-details-gap: var(--size-4-4);
-	/* Obsidian's pill radius. On macOS Obsidian draws buttons as squircles
-	   (--button-corner-shape); chips stay round, like tags and pills. */
-	--bases-gallery-chip-radius: var(--pill-radius, 2em);
+	/* Concentric with the media's corner: its radius less the gap. Drawn
+	   round, not as the squircle Obsidian gives buttons on macOS. */
+	--bases-gallery-chip-radius: max(0px, calc(var(--bases-gallery-radius) - var(--bases-gallery-chip-inset)));
 	--bases-gallery-preview-fade-in: 300ms;
 	--bases-gallery-preview-fade-out: 200ms;
 }
