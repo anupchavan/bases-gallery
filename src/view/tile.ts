@@ -8,6 +8,8 @@ import { MediaSource } from '../media/resolve';
  */
 export class Tile {
 	readonly el: HTMLElement;
+	/** Index of the item this tile shows. */
+	index = -1;
 	private imgEl: HTMLImageElement | null = null;
 	private iconEl: HTMLElement | null = null;
 	private src = '';
@@ -69,6 +71,11 @@ export class Tile {
 		this.src = '';
 		this.imgEl?.removeAttribute('src');
 		this.el.detach();
+	}
+
+	/** The loaded image, if this tile shows one. */
+	get image(): HTMLImageElement | null {
+		return this.imgEl?.parentElement && this.imgEl.hasClass('is-loaded') ? this.imgEl : null;
 	}
 
 	private ensureImg(): HTMLImageElement {

@@ -79,3 +79,53 @@
 		animation-duration: 2.4s;
 	}
 }
+
+.bases-gallery-tile[data-kind="image"] {
+	cursor: zoom-in;
+}
+
+.bases-gallery-media.is-zoom-source {
+	visibility: hidden;
+}
+
+/* Fill on click: medium-zoom's timing (300 ms, cubic-bezier(.2,0,.2,1)). */
+.bases-gallery-zoom-overlay {
+	--bases-gallery-zoom-duration: 300ms;
+
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-modal);
+	background: var(--background-primary);
+	opacity: 0;
+	cursor: zoom-out;
+	transition: opacity var(--bases-gallery-zoom-duration);
+}
+
+.bases-gallery-zoom-overlay.is-open {
+	opacity: 1;
+}
+
+.bases-gallery-zoom-image {
+	position: fixed;
+	top: var(--zoom-top);
+	left: var(--zoom-left);
+	width: var(--zoom-width);
+	height: var(--zoom-height);
+	z-index: var(--layer-modal);
+	object-fit: cover;
+	border-radius: var(--bases-gallery-radius, var(--radius-s));
+	cursor: zoom-out;
+	transition: transform 300ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.bases-gallery-zoom-image.is-open {
+	transform: var(--zoom-transform);
+	will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.bases-gallery-zoom-overlay,
+	.bases-gallery-zoom-image {
+		transition: none;
+	}
+}

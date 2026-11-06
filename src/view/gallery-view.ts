@@ -1,4 +1,5 @@
-import { BasesView, QueryController, TFile, debounce, getAllTags } from 'obsidian';
+import { BasesView, Keymap, QueryController, TFile, debounce, getAllTags } from 'obsidian';
+import { FillZoom } from '../zoom/fill';
 import type { Size } from '../media/dimensions';
 import { NoteSignals, areaWeights, incomingLinkCounts, relatednessScores } from '../media/importance';
 import { probeSize } from '../media/probe';
@@ -95,6 +96,7 @@ export class GalleryView extends BasesView {
 	private readyTimer = 0;
 
 	private lastLayoutMs = 0;
+	private zoom: FillZoom | null = null;
 	/** Items laid out so far (whole pages). */
 	private loaded = 0;
 	private loadingMore = false;
@@ -141,6 +143,9 @@ export class GalleryView extends BasesView {
 				if (this.settings?.sizeBy === 'related') this.refreshWeights();
 			}),
 		);
+
+		this.zoom = this.addChild(new FillZoom(this.app));
+		this.registerDomEvent(this.sizerEl, 'click', (evt) => this.onTileClick(evt));
 
 		this.bindScroll();
 		this.register(this.rootEl.onWindowMigrated(() => this.bindScroll()));
@@ -346,6 +351,30 @@ export class GalleryView extends BasesView {
 		this.emptyEl.show();
 	}
 
+	/**
+	 * A click fills the window with the image. Cmd/Ctrl-click (or middle
+	 * click) opens the note instead, like a link.
+	 */
+	private onTileClick(evt: MouseEvent): void {
+		const target = evt.target;
+		if (!(target instanceof HTMLElement)) return;
+		const tileEl = target.closest('.bases-gallery-tile');
+		if (!tileEl) return;
+		let tile: Tile | null = null;
+		for (const t of this.mounted.values()) {
+			if (t.el === tileEl) tile = t;
+		}
+		const item = tile ? this.items[tile.index] : undefined;
+		if (!tile || !item) return;
+		evt.preventDefault();
+		if (Keymap.isModEvent(evt)) {
+			void this.app.workspace.openLinkText(item.file.path, '', Keymap.isModEvent(evt));
+			return;
+		}
+		const image = tile.image;
+		if (item.media.kind === 'image' && image) this.zoom?.open(image);
+	}
+
 	/** Coalesces all work into one animation frame. */
 	private requestUpdate(relayout: boolean): void {
 		if (relayout) this.needsLayout = true;
@@ -448,6 +477,7 @@ export class GalleryView extends BasesView {
 				tile = this.takeTile();
 				this.mounted.set(item.key, tile);
 			}
+			tile.index = i;
 			tile.place(box);
 			tile.show(item.media);
 		}
