@@ -22,6 +22,9 @@ const FIRST_PAINT_WAIT_MS = 250;
 const FIRST_PAINT_ITEMS = 40;
 /** Mosaic rows are taller than the tile size because they hold stacked pairs. */
 const MOSAIC_ROW_SCALE = 1.5;
+/** A layout slower than this waits for window resizes to settle. */
+const SLOW_LAYOUT_MS = 8;
+const RESIZE_SETTLE_MS = 150;
 
 interface Item {
 	key: string;
@@ -77,6 +80,9 @@ export class GalleryView extends BasesView {
 	private ready = false;
 	private readyTimer = 0;
 
+	private lastLayoutMs = 0;
+	private readonly settleResize = debounce(() => this.requestUpdate(true), RESIZE_SETTLE_MS, true);
+
 	private frame = 0;
 	private needsLayout = false;
 	private unbindScroll: (() => void) | null = null;
@@ -91,9 +97,11 @@ export class GalleryView extends BasesView {
 
 	onload(): void {
 		const resizeObserver = new ResizeObserver(() => {
-			if (this.sizerEl.clientWidth !== this.layoutWidth) {
-				this.requestUpdate(true);
-			}
+			if (this.sizerEl.clientWidth === this.layoutWidth) return;
+			// Like Google Photos: when a full layout is expensive, wait for the
+			// resize to settle instead of relaying out every frame.
+			if (this.lastLayoutMs > SLOW_LAYOUT_MS) this.settleResize();
+			else this.requestUpdate(true);
 		});
 		resizeObserver.observe(this.sizerEl);
 		this.register(() => resizeObserver.disconnect());
@@ -114,6 +122,7 @@ export class GalleryView extends BasesView {
 		if (this.readyTimer) window.clearTimeout(this.readyTimer);
 		this.probeQueue = [];
 		this.flushSaves.run();
+		this.settleResize.cancel();
 		for (const tile of this.mounted.values()) tile.release();
 		this.mounted.clear();
 		this.pool.length = 0;
@@ -224,6 +233,7 @@ export class GalleryView extends BasesView {
 		const { settings } = this;
 		if (!settings) return;
 		const anchor = this.captureAnchor();
+		const started = performance.now();
 
 		this.layoutWidth = this.sizerEl.clientWidth;
 		this.gap = parseFloat(getComputedStyle(this.sizerEl).rowGap) || 0;
@@ -252,6 +262,7 @@ export class GalleryView extends BasesView {
 						},
 					).boxes;
 		this.layout = placed(boxes);
+		this.lastLayoutMs = performance.now() - started;
 		this.sizerEl.setCssProps({
 			'--bases-gallery-height': `${this.layout.height}px`,
 		});
