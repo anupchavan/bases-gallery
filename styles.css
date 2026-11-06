@@ -151,6 +151,7 @@
 }
 
 .bases-gallery-zoom-box.is-open {
+	border-radius: var(--bases-gallery-zoom-radius);
 	top: var(--frame-top);
 	left: var(--frame-left);
 	width: var(--frame-width);
@@ -184,7 +185,7 @@ video.bases-gallery-zoom-media {
 
 .bases-gallery-zoom-stage.is-dark {
 	/* Square corners for the media and, through it, the chips. */
-	--bases-gallery-radius: 0px;
+	--bases-gallery-zoom-radius: 0px;
 }
 
 .bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
@@ -212,20 +213,20 @@ video.bases-gallery-zoom-media {
 }
 
 /*
- * Player controls, inside the zoomed video's box: a scrim for
- * contrast, then one row of play, time, scrub bar, mute and fullscreen.
- * They fade in once the video has arrived and hide after two idle seconds
- * while it plays.
+ * Player controls, inside the zoomed video's box, laid out like YouTube's
+ * 2025 player: the scrub bar across the full width over a short scrim, and
+ * under it translucent shapes for play, mute and the time on the left and
+ * fullscreen on the right. They fade in once the video has arrived and hide
+ * after two idle seconds while it plays.
  */
 .bases-gallery-controls {
 	position: absolute;
 	inset: auto 0 0;
 	display: flex;
-	align-items: center;
-	gap: var(--size-4-2);
-	/* The corner buttons sit the same gap from the edge as every chip. */
-	padding: var(--size-4-16) var(--bases-gallery-chip-inset) var(--bases-gallery-chip-inset);
-	background: linear-gradient(transparent, color-mix(in oklch, black 50%, transparent) 50%, color-mix(in oklch, black 80%, transparent));
+	flex-direction: column;
+	gap: var(--size-4-1);
+	padding: var(--size-4-12) var(--bases-gallery-chip-inset) var(--bases-gallery-chip-inset);
+	background: linear-gradient(transparent, color-mix(in oklch, black 45%, transparent));
 	color: white;
 	opacity: 0;
 	pointer-events: none;
@@ -238,25 +239,44 @@ video.bases-gallery-zoom-media {
 	transition-duration: var(--bases-gallery-preview-fade-in);
 }
 
-.bases-gallery-controls .bases-gallery-control {
+.bases-gallery-controls-row {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.bases-gallery-controls-spacer {
+	flex: 1;
+}
+
+.bases-gallery-controls .bases-gallery-control,
+.bases-gallery-control-time {
+	--button-corner-shape: round;
+
 	display: flex;
 	flex: none;
 	align-items: center;
 	justify-content: center;
-	width: var(--bases-gallery-chip-size);
 	height: var(--bases-gallery-chip-size);
-	padding: 0;
-	--button-corner-shape: round;
 	border-radius: var(--bases-gallery-chip-radius);
 	background: var(--bases-gallery-chip-fill);
-	box-shadow: var(--bases-gallery-chip-ring);
+	box-shadow: none;
 	color: inherit;
+}
+
+.bases-gallery-controls .bases-gallery-control {
+	width: var(--bases-gallery-chip-size);
+	padding: 0;
 	cursor: pointer;
+	transition: background-color var(--anim-duration-fast, 140ms);
 }
 
 .bases-gallery-controls .bases-gallery-control:hover {
 	background: var(--bases-gallery-chip-fill-hover);
-	box-shadow: var(--bases-gallery-chip-ring);
+}
+
+.bases-gallery-controls .bases-gallery-control:active {
+	transform: scale(0.94);
 }
 
 .bases-gallery-control svg {
@@ -265,8 +285,8 @@ video.bases-gallery-zoom-media {
 }
 
 .bases-gallery-control-time {
-	flex: none;
-	font-size: var(--font-ui-smaller);
+	padding: 0 var(--size-4-3);
+	font-size: var(--font-ui-small);
 	font-variant-numeric: tabular-nums;
 }
 
@@ -274,8 +294,8 @@ video.bases-gallery-zoom-media {
 	--bases-gallery-track-height: var(--size-2-2);
 
 	position: relative;
-	flex: 1;
-	height: var(--bases-gallery-chip-size);
+	height: var(--size-4-4);
+	margin: 0 var(--size-4-1);
 	cursor: pointer;
 	touch-action: none;
 }
@@ -290,6 +310,7 @@ video.bases-gallery-zoom-media {
 	margin: auto 0;
 	border-radius: calc(var(--bases-gallery-track-height) / 2);
 	transform-origin: left;
+	transition: height var(--anim-duration-fast, 140ms);
 }
 
 .bases-gallery-control-track::before {
@@ -308,7 +329,7 @@ video.bases-gallery-zoom-media {
 }
 
 .bases-gallery-control-track:hover {
-	--bases-gallery-track-height: var(--size-2-3);
+	--bases-gallery-track-height: var(--size-4-1);
 }
 
 /*
@@ -329,9 +350,6 @@ video.bases-gallery-zoom-media {
 	--bases-gallery-chip-inset: var(--size-2-1);
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
 	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
-	/* Switched on (the info button): pushed in, darker, with an inner shadow. */
-	--bases-gallery-chip-fill-pressed: color-mix(in oklch, black 85%, transparent);
-	--bases-gallery-chip-pressed-shadow: inset 0 1px 3px color-mix(in oklch, black 60%, transparent);
 	/* The tile edge's hairline: --mono-100 is dark in light themes, light in dark ones. */
 	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, var(--mono-100) 10%, transparent);
 	/* Properties panel beside a zoomed photo or video. */
@@ -342,6 +360,20 @@ video.bases-gallery-zoom-media {
 	--bases-gallery-chip-radius: max(0px, calc(var(--bases-gallery-radius) - var(--bases-gallery-chip-inset)));
 	--bases-gallery-preview-fade-in: 300ms;
 	--bases-gallery-preview-fade-out: 200ms;
+}
+
+/*
+ * In the zoom the media's corner is --radius-l, so the chips there are
+ * larger, rounder and still concentric: radius = corner radius - gap.
+ * Translucent black with no edge, like YouTube's player.
+ */
+.bases-gallery-zoom-stage {
+	--bases-gallery-zoom-radius: var(--radius-l);
+	--bases-gallery-chip-inset: var(--size-2-3);
+	--bases-gallery-chip-icon: var(--icon-m);
+	--bases-gallery-chip-radius: max(0px, calc(var(--bases-gallery-zoom-radius) - var(--bases-gallery-chip-inset)));
+	--bases-gallery-chip-fill: color-mix(in oklch, black 30%, transparent);
+	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 50%, transparent);
 }
 
 .bases-gallery-preview {
@@ -432,7 +464,6 @@ video.bases-gallery-zoom-media {
 	padding: 0;
 	border-radius: var(--bases-gallery-chip-radius);
 	background: var(--bases-gallery-chip-fill);
-	box-shadow: var(--bases-gallery-chip-ring);
 	color: white;
 	cursor: pointer;
 	opacity: 0;
@@ -445,8 +476,12 @@ video.bases-gallery-zoom-media {
 }
 
 .bases-gallery-zoom-box .bases-gallery-zoom-info.is-active {
-	background: var(--bases-gallery-chip-fill-pressed);
-	box-shadow: var(--bases-gallery-chip-pressed-shadow), var(--bases-gallery-chip-ring);
+	background: color-mix(in oklch, white 90%, transparent);
+	color: black;
+}
+
+.bases-gallery-zoom-box .bases-gallery-zoom-info:active {
+	transform: scale(0.94);
 }
 
 .bases-gallery-zoom-info svg {
@@ -455,10 +490,7 @@ video.bases-gallery-zoom-media {
 	transition: transform var(--anim-duration-fast, 140ms);
 }
 
-/* The icon sits a hair lower while pressed. */
-.bases-gallery-zoom-info.is-active svg {
-	transform: translateY(0.5px);
-}
+
 
 .bases-gallery-zoom-stage.is-ready:not(.is-idle) .bases-gallery-zoom-box:hover .bases-gallery-zoom-info,
 .bases-gallery-zoom-stage.is-ready .bases-gallery-zoom-info.is-active {

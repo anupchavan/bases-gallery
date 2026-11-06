@@ -24,6 +24,7 @@ export interface PlayerHost {
  */
 export class VideoControls extends Component {
 	readonly el: HTMLElement;
+	private readonly rowEl: HTMLElement;
 	private readonly playEl: HTMLElement;
 	private readonly timeEl: HTMLElement;
 	private readonly trackEl: HTMLElement;
@@ -48,13 +49,17 @@ export class VideoControls extends Component {
 		private readonly idleEl: HTMLElement,
 	) {
 		super();
+		// YouTube's layout: the scrub bar across the full width, and under it
+		// a row of play, mute and time on the left, fullscreen on the right.
 		this.el = parentEl.createDiv('bases-gallery-controls');
-		this.playEl = this.button('bases-gallery-control-play');
-		this.timeEl = this.el.createDiv('bases-gallery-control-time');
 		this.trackEl = this.el.createDiv({ cls: 'bases-gallery-control-track', attr: { role: 'slider', tabindex: '0', 'aria-label': 'Seek' } });
 		this.bufferedEl = this.trackEl.createDiv('bases-gallery-control-buffered');
 		this.playedEl = this.trackEl.createDiv('bases-gallery-control-played');
+		this.rowEl = this.el.createDiv('bases-gallery-controls-row');
+		this.playEl = this.button('bases-gallery-control-play');
 		this.muteEl = this.button('bases-gallery-control-mute');
+		this.timeEl = this.rowEl.createDiv('bases-gallery-control-time');
+		this.rowEl.createDiv('bases-gallery-controls-spacer');
 		this.fullscreenEl = this.button('bases-gallery-control-fullscreen');
 	}
 
@@ -231,7 +236,7 @@ export class VideoControls extends Component {
 	}
 
 	private button(cls: string): HTMLElement {
-		return this.el.createEl('button', { cls: `bases-gallery-control ${cls}`, attr: { type: 'button' } });
+		return this.rowEl.createEl('button', { cls: `bases-gallery-control ${cls}`, attr: { type: 'button' } });
 	}
 }
 
