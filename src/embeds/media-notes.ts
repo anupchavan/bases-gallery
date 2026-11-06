@@ -13,6 +13,9 @@ import {
 import { resolveMediaText } from '../media/resolve';
 import type { MediaNoteFilter } from './media-note-filter';
 
+/** Obsidian's internal embed factory: (context, file, subpath) → embed component. */
+type EmbedFactory = (this: unknown, context: unknown, file: unknown, subpath: string) => unknown;
+
 /** `![[target#sub|alias]]`: the target and the alias (size or caption). */
 const EMBED = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
 
@@ -34,18 +37,53 @@ export class MediaNoteEmbeds extends Component {
 	}
 
 	onload(): void {
+		if (this.routeEmbeds()) return;
+		// Fallback when Obsidian's embed factories aren't where we expect:
+		// draw the media ourselves (without Obsidian's image controls).
 		this.registerPostProcessor((el, ctx) => this.retarget(el, ctx.sourcePath));
 		// Obsidian draws embeds as block widgets from a state field; ours is
 		// one too, ahead of it, so it is the one shown.
 		this.registerEditorExtension(Prec.highest(livePreviewEmbeds(this)));
 	}
 
-	/** The media file a note stands for, or null when it isn't a media note. */
+	/**
+	 * Hands a media note's embed to the embed factory for its media file's
+	 * type, so Obsidian builds a real image, video or PDF embed: its own
+	 * controls, keys, resizing and viewer, in reading view and the editor.
+	 * Obsidian has no public hook for this; the factories are private, as
+	 * Custom Views also uses them (the agreed exception). Returns false when
+	 * they aren't there, and undoes itself on unload.
+	 */
+	private routeEmbeds(): boolean {
+		const registry = (this.app as App & { embedRegistry?: { embedByExtension?: Record<string, EmbedFactory | undefined> } })
+			.embedRegistry?.embedByExtension;
+		const original = registry?.md;
+		if (!registry || typeof original !== 'function') return false;
+		const mediaOfNote = (note: TFile): TFile | null => this.mediaOfNote(note);
+		// A function, not an arrow: Obsidian calls factories with its own `this`.
+		const routed: EmbedFactory = function (this: unknown, context, file, subpath) {
+			const media = file instanceof TFile ? mediaOfNote(file) : null;
+			const factory = media ? registry[media.extension.toLowerCase()] : undefined;
+			if (media && typeof factory === 'function') return factory.call(this, context, media, '');
+			return original.call(this, context, file, subpath);
+		};
+		registry.md = routed;
+		this.register(() => {
+			if (registry.md === routed) registry.md = original;
+		});
+		return true;
+	}
+
+	/** The media file a linked note stands for, or null when it isn't a media note. */
 	mediaOf(linktext: string, sourcePath: string): TFile | null {
-		const property = this.property();
-		if (!property) return null;
 		const note = this.app.metadataCache.getFirstLinkpathDest(getLinkpath(linktext), sourcePath);
-		if (!note || note.extension !== 'md') return null;
+		return note ? this.mediaOfNote(note) : null;
+	}
+
+	/** The media file a note stands for, or null when it isn't a media note. */
+	mediaOfNote(note: TFile): TFile | null {
+		const property = this.property();
+		if (!property || note.extension !== 'md') return null;
 		const value: unknown = this.app.metadataCache.getFileCache(note)?.frontmatter?.[property];
 		const raw = Array.isArray(value) ? (value as unknown[])[0] : value;
 		if (typeof raw !== 'string') return null;
