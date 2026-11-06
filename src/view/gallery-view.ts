@@ -3,6 +3,7 @@ import { FillZoom } from '../zoom/fill';
 import type { Size } from '../media/dimensions';
 import { NoteSignals, areaWeights, incomingLinkCounts, relatednessScores } from '../media/importance';
 import { probeSize } from '../media/probe';
+import { Thumbnails } from '../media/thumbnails';
 import { loadSizes, saveSizes } from '../media/size-cache';
 import { Box, justify } from '../layout/justify';
 import { mosaic } from '../layout/mosaic';
@@ -72,6 +73,9 @@ export class GalleryView extends BasesView {
 
 	/** Known aspect ratios by media URL. */
 	private readonly ratios = new Map<string, number>();
+	/** Known natural sizes by media URL, for picking thumbnail sizes. */
+	private readonly sizes = new Map<string, Size>();
+	private thumbnails: Thumbnails | null = null;
 	/** Mounted tiles by item key. */
 	private readonly mounted = new Map<string, Tile>();
 	private readonly pool: Tile[] = [];
@@ -145,6 +149,12 @@ export class GalleryView extends BasesView {
 			}),
 		);
 
+		this.thumbnails = new Thumbnails(this.app, () => {
+			const keys = new Set<string>();
+			for (const tile of this.mounted.values()) if (tile.thumbKey) keys.add(tile.thumbKey);
+			return keys;
+		});
+		this.register(() => this.thumbnails?.dispose());
 		this.zoom = this.addChild(
 			new FillZoom(this.app, () => {
 				if (!this.zoomHeldUpdate) return;
@@ -247,6 +257,7 @@ export class GalleryView extends BasesView {
 	private async ensureSizes(): Promise<void> {
 		this.cacheLoaded ??= loadSizes().then((cached) => {
 			for (const [src, size] of cached) {
+				this.sizes.set(src, size);
 				if (!this.ratios.has(src)) this.ratios.set(src, size.width / size.height);
 			}
 		});
@@ -324,6 +335,7 @@ export class GalleryView extends BasesView {
 				this.activeProbes--;
 				this.probing.delete(item.media.src);
 				if (size) {
+					this.sizes.set(item.media.src, size);
 					this.pendingSaves.push([item.media.src, size]);
 					this.flushSaves();
 					this.onRatio(item.media.src, size.width / size.height);
@@ -379,7 +391,7 @@ export class GalleryView extends BasesView {
 			return;
 		}
 		const image = tile.image;
-		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null);
+		if (item.media.kind === 'image' && image) this.zoom?.open(image, this.scrollers[0] ?? null, item.media.src);
 	}
 
 	/** Coalesces all work into one animation frame. */
@@ -471,6 +483,7 @@ export class GalleryView extends BasesView {
 		const bottom = view.bottom + span * BUFFER_BELOW;
 
 		const wanted = new Set<string>();
+		const dpr = this.rootEl.win.devicePixelRatio || 1;
 		const { boxes, order } = layout;
 		for (
 			let k = firstAtOrBelow(layout, top - layout.maxHeight);
@@ -491,7 +504,13 @@ export class GalleryView extends BasesView {
 			}
 			tile.index = i;
 			tile.place(box);
-			tile.show(item.media);
+			const natural = this.sizes.get(item.media.src);
+			const needPx = Math.max(box.width, box.height) * dpr;
+			const thumbs = this.thumbnails;
+			const key = thumbs ? thumbs.keyFor(item.media, natural, needPx) : null;
+			tile.show(item.media, key, () =>
+				thumbs ? thumbs.get(item.media, natural, needPx) : Promise.resolve(null),
+			);
 		}
 
 		for (const [key, tile] of this.mounted) {

@@ -46,7 +46,7 @@ export class FillZoom extends Component {
 	 * input keeps scrolling it underneath, and the image moves with the page
 	 * until the zoom closes, as on MUBI.
 	 */
-	open(source: HTMLImageElement, scroller: HTMLElement | null): void {
+	open(source: HTMLImageElement, scroller: HTMLElement | null, original?: string): void {
 		if (this.isOpen || !source.isConnected || source.naturalWidth === 0) return;
 		const doc = source.doc;
 		const win = source.win;
@@ -87,6 +87,21 @@ export class FillZoom extends Component {
 			// keep the same visible corner on every image, whatever its zoom.
 			'--zoom-scale': `${scale}`,
 		});
+
+		// The tile may show a thumbnail: load the original behind the clone and
+		// swap it in once decoded, as medium-zoom does with data-zoom-src.
+		const shown = source.currentSrc || source.src;
+		if (original && original !== shown) {
+			const full = new Image();
+			full.decoding = 'async';
+			full.src = original;
+			void full
+				.decode()
+				.then(() => {
+					if (this.cloneEl === clone) clone.src = original;
+				})
+				.catch(() => {});
+		}
 
 		// Let the start position paint, then switch on the open state so the
 		// transition runs.

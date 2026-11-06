@@ -13,6 +13,8 @@ export class Tile {
 	private imgEl: HTMLImageElement | null = null;
 	private iconEl: HTMLElement | null = null;
 	private src = '';
+	/** Thumbnail key shown (or being fetched); null when showing the original. */
+	thumbKey: string | null = null;
 	private box: Box | null = null;
 
 	constructor(
@@ -22,18 +24,38 @@ export class Tile {
 		this.el = parentEl.createDiv('bases-gallery-tile');
 	}
 
-	/** Shows `media` in this tile, reusing the loaded image when it's the same. */
-	show(media: MediaSource): void {
-		if (media.src === this.src) return;
+	/**
+	 * Shows `media` in this tile. Images show the thumbnail `thumbKey` names,
+	 * fetched with `thumbnail` (null key: the original). A bigger thumbnail
+	 * replaces a smaller one only once it is ready, so the tile never blanks.
+	 */
+	show(
+		media: MediaSource,
+		thumbKey: string | null,
+		thumbnail: () => Promise<string | null>,
+	): void {
+		const changed = media.src !== this.src;
+		if (!changed && thumbKey === this.thumbKey) return;
 		this.src = media.src;
+		this.thumbKey = thumbKey;
 		this.el.dataset.kind = media.kind;
-		this.el.removeClass('is-broken');
 
 		if (media.kind === 'image') {
 			this.iconEl?.detach();
 			const img = this.ensureImg();
-			img.removeClass('is-loaded');
-			img.src = media.src;
+			if (changed) {
+				this.el.removeClass('is-broken');
+				img.removeClass('is-loaded');
+				img.removeAttribute('src');
+			}
+			if (thumbKey === null) {
+				img.src = media.src;
+				return;
+			}
+			void thumbnail().then((url) => {
+				if (this.src !== media.src || this.thumbKey !== thumbKey) return;
+				img.src = url ?? media.src;
+			});
 		} else {
 			// Video posters arrive in a later milestone.
 			this.imgEl?.detach();
@@ -69,6 +91,7 @@ export class Tile {
 	/** Frees the image so a pooled tile holds no decoded pixels. */
 	release(): void {
 		this.src = '';
+		this.thumbKey = null;
 		this.imgEl?.removeAttribute('src');
 		this.el.detach();
 	}

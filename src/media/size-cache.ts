@@ -5,24 +5,7 @@
  */
 import type { Size } from './dimensions';
 
-const DB_NAME = 'bases-gallery';
-const STORE = 'sizes';
-
-let opening: Promise<IDBDatabase | null> | null = null;
-
-function open(): Promise<IDBDatabase | null> {
-	opening ??= new Promise((resolve) => {
-		try {
-			const request = indexedDB.open(DB_NAME, 1);
-			request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-			request.onsuccess = () => resolve(request.result);
-			request.onerror = () => resolve(null);
-		} catch {
-			resolve(null);
-		}
-	});
-	return opening;
-}
+import { SIZES as STORE, openDatabase as open } from './db';
 
 /** Reads every cached size at once; the store holds a few dozen bytes per item. */
 export async function loadSizes(): Promise<Map<string, Size>> {
