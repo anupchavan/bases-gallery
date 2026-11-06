@@ -6,6 +6,11 @@ const DURATION_MS = 300;
 /** Wheel distance that closes the zoom, and the pause before it does. */
 const SCROLL_CLOSE_PX = 40;
 const SCROLL_CLOSE_DELAY_MS = 150;
+/**
+ * Transitions stay off this long after a resize. macOS animates a window
+ * into fullscreen over several resizes, and each one snaps.
+ */
+const REFIT_SETTLE_MS = 400;
 
 export interface ZoomMedia {
 	kind: 'image' | 'video';
@@ -55,6 +60,7 @@ export class FillZoom extends Component {
 	private scope: Scope | null = null;
 	private closing = false;
 	private wheelTimer = 0;
+	private refitTimer = 0;
 	/** Owns this zoom's listeners; removed when the zoom closes. */
 	private session: Component | null = null;
 
@@ -136,8 +142,8 @@ export class FillZoom extends Component {
 			session.registerDomEvent(clone, 'click', () => controls.togglePlay());
 			session.registerDomEvent(clone, 'dblclick', () => this.toggleFullscreen());
 			// Window size changes (fullscreen included) refit the video.
-			session.registerDomEvent(box.win, 'resize', () => this.fit());
-			session.registerDomEvent(doc, 'fullscreenchange', () => this.fit());
+			session.registerDomEvent(box.win, 'resize', () => this.refit());
+			session.registerDomEvent(doc, 'fullscreenchange', () => this.refit());
 		} else {
 			session.registerDomEvent(clone, 'click', () => this.close());
 			session.registerDomEvent(box.win, 'resize', () => this.close());
@@ -285,6 +291,18 @@ export class FillZoom extends Component {
 		});
 	}
 
+	/** Fits again at once, with the size transitions off until it has painted. */
+	private refit(): void {
+		const stage = this.stageEl;
+		if (!stage || this.closing) return;
+		stage.addClass('is-refitting');
+		this.fit();
+		window.clearTimeout(this.refitTimer);
+		this.refitTimer = window.setTimeout(() => {
+			if (this.stageEl === stage) stage.removeClass('is-refitting');
+		}, REFIT_SETTLE_MS);
+	}
+
 	private isFullscreen(): boolean {
 		return this.stageEl !== null && this.stageEl.doc.fullscreenElement === this.stageEl;
 	}
@@ -299,6 +317,7 @@ export class FillZoom extends Component {
 	private cleanUp(): void {
 		if (this.wheelTimer) window.clearTimeout(this.wheelTimer);
 		this.wheelTimer = 0;
+		window.clearTimeout(this.refitTimer);
 		if (this.scope) this.app.keymap.popScope(this.scope);
 		this.scope = null;
 		if (this.session) this.removeChild(this.session);

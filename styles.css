@@ -178,6 +178,14 @@ video.bases-gallery-zoom-media {
 
 .bases-gallery-zoom-stage:fullscreen .bases-gallery-zoom-box {
 	border-radius: 0;
+	transform: none;
+}
+
+/* Window and fullscreen changes snap to the new size: animating the box
+   while the media inside jumps would flicker. */
+.bases-gallery-zoom-stage.is-refitting .bases-gallery-zoom-box,
+.bases-gallery-zoom-stage.is-refitting .bases-gallery-zoom-media {
+	transition: none;
 }
 
 .bases-gallery-zoom-stage.is-idle .bases-gallery-zoom-box,
@@ -227,7 +235,8 @@ video.bases-gallery-zoom-media {
 	width: var(--bases-gallery-chip-size);
 	height: var(--bases-gallery-chip-size);
 	padding: 0;
-	border-radius: 50%;
+	--button-corner-shape: round;
+	border-radius: var(--bases-gallery-chip-radius);
 	background: var(--bases-gallery-chip-fill);
 	box-shadow: var(--bases-gallery-chip-ring);
 	color: inherit;
@@ -304,6 +313,9 @@ video.bases-gallery-zoom-media {
 	--bases-gallery-chip-fill: color-mix(in oklch, black 55%, transparent);
 	--bases-gallery-chip-fill-hover: color-mix(in oklch, black 75%, transparent);
 	--bases-gallery-chip-ring: inset 0 0 0 var(--border-width) color-mix(in oklch, white 35%, transparent);
+	/* Obsidian's pill radius. On macOS Obsidian draws buttons as squircles
+	   (--button-corner-shape); chips stay round, like tags and pills. */
+	--bases-gallery-chip-radius: var(--pill-radius, 2em);
 	--bases-gallery-preview-fade-in: 300ms;
 	--bases-gallery-preview-fade-out: 200ms;
 }
@@ -333,8 +345,10 @@ video.bases-gallery-zoom-media {
 	position: absolute;
 	right: var(--bases-gallery-chip-inset);
 	bottom: var(--bases-gallery-chip-inset);
+	--button-corner-shape: round;
+
 	height: var(--bases-gallery-chip-size);
-	border-radius: calc(var(--bases-gallery-chip-size) / 2);
+	border-radius: var(--bases-gallery-chip-radius);
 	background: var(--bases-gallery-chip-fill);
 	box-shadow: var(--bases-gallery-chip-ring);
 	color: white;
