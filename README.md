@@ -80,6 +80,10 @@ Photos: JPEG, PNG, GIF, WebP, AVIF, SVG, BMP. Videos: MP4, WebM, MOV, M4V, OGV, 
 - Sizes and thumbnails are cached on your device (IndexedDB), never uploaded.
 - The plugin makes no network requests of its own. Web addresses in your notes are loaded by Obsidian like any embedded image.
 
+## Security
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability or verify a release's files.
+
 ## Contributing
 
 Issues and pull requests are welcome. When reporting a problem, include the relevant part of the `.base` file, an affected note's frontmatter and any console error. See [CONTRIBUTING.md](CONTRIBUTING.md) to set up a development build.
