@@ -1,19 +1,19 @@
 /**
  * Mosaic layout.
  *
- * Two published ideas combined:
- * - Row breaking is Knuth-Plass style dynamic programming, as in the Google
- *   Photos web grid ("FlexLayout"): every permissible set of rows is
- *   considered and the one with the least total badness wins.
- * - Each row is a sequence of blocks, and a block is a small slicing
- *   (guillotine) tree of tiles, as in BRIC-style photo collages: a single
- *   tile, a stack of two or three, a pair over a single (or the reverse), or
- *   a 2x2. In a slicing tree every tile keeps its exact aspect ratio and the
- *   block is a perfect rectangle, so rows have no holes and no ragged edges.
+ * The gallery is a stack of full-width bands. Each band is a row of
+ * columns, and each column is any slicing (guillotine) tree of up to
+ * MAX_COLUMN_TILES tiles whose root is a stack: tiles side by side, stacked,
+ * nested both ways, as in BRIC-style photo collages. In a slicing tree every
+ * tile keeps its exact aspect ratio and the band is a perfect rectangle, so
+ * there are no holes and nothing is cropped. Split positions and band heights
+ * are real numbers: they fall wherever the photos' shapes put them.
  *
- * The cost of a row combines how far its height is from the target, how much
- * it had to crop (never past the cap), and preferences from the size
- * property (large tiles stand alone, small tiles go into blocks).
+ * A band's height is whatever makes it exactly as wide as the gallery. Its
+ * cost compares each tile's area with the area it should have (larger for
+ * more important notes). Bands are chosen by dynamic programming,
+ * Knuth-Plass style (as in the Google Photos web grid), over the ways of
+ * splitting the sequence; columns within a band by a beam search.
  */
 import type { Box } from './justify';
 
@@ -27,15 +27,11 @@ export interface MosaicItem {
 export interface MosaicOptions {
 	/** Inner width of the container in px. */
 	width: number;
-	/** Height a row aims for, in px. */
-	rowHeight: number;
+	/** Edge of a square medium tile, in px: sets the area tiles aim for. */
+	tileSize: number;
 	/** Space between tiles, in px (both directions). */
 	gap: number;
-	/** Largest share of a tile's width or height cropped on each side, 0 to 0.25. */
-	maxCropPerSide: number;
-	/** Only single tiles per block: plain justified rows. */
-	singlesOnly?: boolean;
-	/** No tile in a block may be shorter or narrower than this, in px. */
+	/** No tile may be shorter than this, nor smaller in area than its square, in px. */
 	minTileSize?: number;
 }
 
@@ -44,425 +40,84 @@ export interface MosaicLayout {
 	height: number;
 }
 
-/**
- * A slicing tree. In a horizontal node children share a height and sit side
- * by side; in a vertical node they share a width and stack.
- */
-type Tree = number | { dir: 'h' | 'v'; children: Tree[] };
+/** A slicing tree: a leaf offset, or children side by side ('h') or stacked ('v'). */
+type Tree = number | { dir: 'h' | 'v'; children: [Tree, Tree] };
 
-/** Block templates. Leaf numbers are offsets into the block's tiles. */
-const TEMPLATES: { tree: Tree; count: number; penalty: number }[] = [
-	// A lone tile fills the band's full height: one of the big tiles.
-	{ tree: 0, count: 1, penalty: 0.2 },
-	{ tree: { dir: 'v', children: [0, 1] }, count: 2, penalty: 0 },
-	{ tree: { dir: 'v', children: [0, 1, 2] }, count: 3, penalty: 0.03 },
-	{ tree: { dir: 'v', children: [{ dir: 'h', children: [0, 1] }, 2] }, count: 3, penalty: 0.02 },
-	{ tree: { dir: 'v', children: [0, { dir: 'h', children: [1, 2] }] }, count: 3, penalty: 0.02 },
-	{
-		tree: {
-			dir: 'v',
-			children: [
-				{ dir: 'h', children: [0, 1] },
-				{ dir: 'h', children: [2, 3] },
-			],
-		},
-		count: 4,
-		penalty: 0.04,
-	},
-];
-
-/** Leaf depth per template, for size preferences. */
-const DEPTHS: number[][] = TEMPLATES.map((t) => leafDepths(t.tree, t.count));
-
-const MAX_ROW_ITEMS = 14;
-/** How far a row's height may move from the target, as a share of it. */
-const HEIGHT_TOLERANCE = 0.3;
-/** Partial rows kept per length while searching (a beam). */
-const BEAM = 6;
+/** Most tiles in one column. Slicing trees: 1, 2, 6, 22 shapes (half are stacks). */
+const MAX_COLUMN_TILES = 4;
+const MAX_BAND_TILES = 12;
+/** Target area multiplier per size class. */
+const AREA_BY_SIZE = [0.55, 1, 2.6];
+/** Band heights allowed, as multiples of the tile size. */
+const MIN_BAND = 0.6;
+const MAX_BAND = 4;
+/** Band height the column beam assumes when ranking partial bands. */
+const TYPICAL_BAND = 2;
+/** Each band adds a full-width seam. */
+const BAND_PENALTY = 0.25;
+/** A band of only single tiles is a plain row. */
+const PLAIN_ROW_PENALTY = 0.6;
+/** Neighbouring columns with the same shape line their seams up. */
+const SAME_NEIGHBOUR_PENALTY = 0.15;
+const BEAM = 4;
 const INFEASIBLE = 1e6;
 
-/** Feature bands: one big tile beside this many sub-rows. */
-const FEATURE_ROWS = [2, 3];
-const MAX_SUBROW_ITEMS = 4;
-/** Width a feature tile takes, as a share of the gallery. */
-const FEATURE_MIN_SHARE = 0.3;
-const FEATURE_MAX_SHARE = 0.7;
-const FEATURE_PENALTY = 0.05;
-/** Rhythm: at least this many plain rows between features, and a cost per row past the max. */
-const MIN_FEATURE_GAP = 2;
-const MAX_FEATURE_GAP = 6;
-const SAME_NEIGHBOUR_PENALTY = 0.1;
-const LATE_FEATURE_PENALTY = 0.25;
-const CADENCE_STATES = 6;
+/** All slicing trees over leaves 0..n-1, in order, without duplicate shapes. */
+function slicingTrees(n: number): Tree[] {
+	const memo = new Map<string, Tree[]>();
+	// Canonical form: a node's first child never has the node's own direction,
+	// so H(H(a, b), c) and H(a, H(b, c)) aren't both generated.
+	const build = (from: number, to: number, notDir: 'h' | 'v' | null): Tree[] => {
+		const key = `${from},${to},${notDir ?? ''}`;
+		const cached = memo.get(key);
+		if (cached) return cached;
+		const out: Tree[] = [];
+		if (to - from === 1) {
+			out.push(from);
+		} else {
+			for (const dir of ['h', 'v'] as const) {
+				if (dir === notDir) continue;
+				for (let split = from + 1; split < to; split++) {
+					for (const left of build(from, split, dir)) {
+						for (const right of build(split, to, null)) {
+							out.push({ dir, children: [left, right] });
+						}
+					}
+				}
+			}
+		}
+		memo.set(key, out);
+		return out;
+	};
+	return build(0, n, null);
+}
 
-type Band = { kind: 'row'; path: Path } | { kind: 'feature'; lens: number[] };
+/** Column shapes: a single tile, or a slicing tree whose root is a stack. */
+const COLUMNS: { tree: Tree; count: number }[] = [];
+for (let n = 1; n <= MAX_COLUMN_TILES; n++) {
+	for (const tree of slicingTrees(n)) {
+		if (typeof tree === 'number' || tree.dir === 'v') COLUMNS.push({ tree, count: n });
+	}
+}
 
-/**
- * Every block and row has width = a * height - b, with a and b fixed by its
- * tiles and gaps. That makes fitting a row a one-unknown equation.
- */
+/** Width = a * height - b for a subtree, given its leaves' ratios. */
 interface Linear {
 	a: number;
 	b: number;
 }
 
-/** A partial row, as a linked list of blocks (last block first). */
-interface Path {
-	template: number;
-	parent: Path | null;
-	blocks: number;
-	singles: number;
-	a: number;
-	b: number;
-	choiceCost: number;
-}
-
-function blocksOf(path: Path): number[] {
-	const out: number[] = [];
-	for (let p: Path | null = path; p && p.blocks > 0; p = p.parent) out.push(p.template);
-	return out.reverse();
-}
-
-export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): MosaicLayout {
-	const n = items.length;
-	const width = Math.max(1, options.width);
-	const target = Math.max(1, options.rowHeight);
-	const gap = Math.max(0, options.gap);
-	const crop = clamp(options.maxCropPerSide, 0, 0.25);
-	const minStretch = 1 - 2 * crop;
-	const maxStretch = 1 / minStretch;
-	const minHeight = target * (1 - HEIGHT_TOLERANCE);
-	const maxHeight = target * (1 + HEIGHT_TOLERANCE);
-	const templates = options.singlesOnly ? 1 : TEMPLATES.length;
-
-	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
-	const size = (i: number): number => clamp(Math.round(items[i]?.size ?? 1), 0, 2);
-
-	const minTile = Math.max(0, options.minTileSize ?? 0);
-	const scratch: Box[] = new Array<Box>(n);
-	// Per position and template: the block's width line and its size cost.
-	const blockA: Float64Array[] = [];
-	const blockB: Float64Array[] = [];
-	const blockCost: Float64Array[] = [];
-	for (let t = 0; t < templates; t++) {
-		const template = TEMPLATES[t];
-		const depths = DEPTHS[t];
-		const a = new Float64Array(n);
-		const b = new Float64Array(n);
-		const c = new Float64Array(n);
-		if (template && depths) {
-			for (let i = 0; i + template.count <= n; i++) {
-				const lin = linear(template.tree, i, ratio, gap);
-				a[i] = lin.a;
-				b[i] = lin.b;
-				let cost = template.penalty;
-				// Legibility: try the block at the lowest row height and most cropping it could get.
-				if (template.count > 1 && minTile > 0) {
-					const blockWidth = (lin.a * minHeight - lin.b) * minStretch;
-					place(template.tree, i, { x: 0, y: 0, width: blockWidth, height: minHeight }, ratio, gap, scratch);
-					for (let leaf = 0; leaf < template.count; leaf++) {
-						const box = scratch[i + leaf];
-						if (!box || box.height < minTile || box.width < minTile) cost = INFEASIBLE;
-					}
-				}
-				for (let leaf = 0; leaf < template.count; leaf++) {
-					cost += sizeCost(size(i + leaf), depths[leaf] ?? 0);
-				}
-				c[i] = cost;
-			}
-		}
-		blockA.push(a);
-		blockB.push(b);
-		blockCost.push(c);
-	}
-
-	const fitRow = (
-		path: Path,
-		last: boolean,
-	): { cost: number; height: number; stretch: number; ragged: boolean } => {
-		const k = path.blocks;
-		const free = width - gap * (k - 1);
-		// a * h - b = free
-		const natural = (free + path.b) / path.a;
-		if (natural >= minHeight && natural <= maxHeight) {
-			return { cost: deviation(natural, target), height: natural, stretch: 1, ragged: false };
-		}
-		if (last && natural > maxHeight) {
-			// A short last row stays at the target height. Mildly penalised so
-			// earlier rows rebalance to give it company.
-			const used = path.a * target - path.b + gap * (k - 1);
-			const empty = 1 - used / width;
-			return { cost: 0.6 * empty * empty, height: target, stretch: 1, ragged: true };
-		}
-		const height = natural > maxHeight ? maxHeight : minHeight;
-		const stretch = free / (path.a * height - path.b);
-		if (stretch >= minStretch && stretch <= maxStretch) {
-			return {
-				cost: deviation(height, target) + 2 * (stretch - 1) ** 2,
-				height,
-				stretch,
-				ragged: false,
-			};
-		}
-		if (natural < minHeight) {
-			// Too wide even with cropping (a panorama): shrink, never crop more.
-			return { cost: deviation(natural, target) + 0.5, height: natural, stretch: 1, ragged: false };
-		}
-		// Too narrow even with cropping: keep shapes, leave the row unfilled.
-		return { cost: INFEASIBLE, height: target, stretch: 1, ragged: true };
-	};
-
-	// Prefix sums of ratios, for sub-rows of feature bands.
-	const prefix = new Float64Array(n + 1);
-	for (let i = 0; i < n; i++) prefix[i + 1] = (prefix[i] ?? 0) + ratio(i);
-	const ratioSum = (from: number, to: number): number => (prefix[to] ?? 0) - (prefix[from] ?? 0);
-
-	/**
-	 * A feature band: tile `start` spans the whole band, next to a column of
-	 * `lens.length` justified sub-rows. Solving the slicing tree
-	 * H(feature, V(row, row, ...)) for the band height H:
-	 *   H = ((W - g) S - Q + (k - 1) g) / (1 + r S)
-	 * with S = sum 1/A_j and Q = sum G_j/A_j over sub-rows (A_j: ratio sum,
-	 * G_j: gaps in the sub-row) and r the feature's ratio.
-	 */
-	const fitFeature = (start: number, lens: number[]): number => {
-		const k = lens.length;
-		let S = 0;
-		let Q = 0;
-		let i = start + 1;
-		for (const len of lens) {
-			const A = ratioSum(i, i + len);
-			S += 1 / A;
-			Q += ((len - 1) * gap) / A;
-			i += len;
-		}
-		const r = ratio(start);
-		const H = ((width - gap) * S - Q + (k - 1) * gap) / (1 + r * S);
-		const featureWidth = r * H;
-		const column = width - gap - featureWidth;
-		if (column <= 0) return INFEASIBLE;
-		// The feature should read as big: a third to two thirds of the width.
-		if (featureWidth < width * FEATURE_MIN_SHARE || featureWidth > width * FEATURE_MAX_SHARE) {
-			return INFEASIBLE;
-		}
-		let cost = 0;
-		i = start + 1;
-		for (const len of lens) {
-			// Sub-rows aim for half a band, like the tiles in a stack of two.
-			const h = (column - (len - 1) * gap) / ratioSum(i, i + len);
-			if (h < minHeight / 2 || h > maxHeight / 2 || h < minTile) return INFEASIBLE;
-			for (let j = i; j < i + len; j++) {
-				if (ratio(j) * h * h < minTile * minTile) return INFEASIBLE;
-			}
-			cost += deviation(h, target / 2);
-			for (let j = i; j < i + len; j++) if (size(j) === 2) cost += 0.3;
-			i += len;
-		}
-		const featureSize = size(start);
-		if (featureSize === 2) cost -= 0.3;
-		else if (featureSize === 0) cost += 1;
-		return cost;
-	};
-
-	// Dynamic programming over (tiles placed, bands since the last feature).
-	const states = CADENCE_STATES;
-	const best = new Float64Array((n + 1) * states).fill(Infinity);
-	const backFrom = new Int32Array((n + 1) * states).fill(-1);
-	const backState = new Int8Array((n + 1) * states);
-	const backBand: (Band | null)[] = new Array<Band | null>((n + 1) * states).fill(null);
-	best[MIN_FEATURE_GAP] = 0;
-
-	for (let start = 0; start < n; start++) {
-		let any = false;
-		for (let c = 0; c < states; c++) if ((best[start * states + c] ?? Infinity) < Infinity) any = true;
-		if (!any) continue;
-
-		const candidates: { end: number; cost: number; band: Band }[] = [];
-
-		// Plain rows of blocks: keep the cheapest row per end.
-		const root: Path = {
-			template: -1,
-			parent: null,
-			blocks: 0,
-			singles: 0,
-			a: 0,
-			b: 0,
-			choiceCost: 0,
-		};
-		const byLength: Path[][] = [[root]];
-		for (let len = 0; len < MAX_ROW_ITEMS && start + len < n; len++) {
-			for (const path of byLength[len] ?? []) {
-				const k = path.blocks;
-				// Already wider than the container at the lowest height and the
-				// most cropping allowed: adding blocks only makes it worse.
-				if (k > 0 && (path.a * minHeight - path.b + gap * (k - 1)) * minStretch > width) continue;
-				const first = start + len;
-				for (let t = 0; t < templates; t++) {
-					const count = TEMPLATES[t]?.count ?? 1;
-					if (len + count > MAX_ROW_ITEMS || first + count > n) continue;
-					keep(byLength, len + count, {
-						template: t,
-						parent: path,
-						blocks: k + 1,
-						singles: path.singles + (t === 0 ? 1 : 0),
-						a: path.a + (blockA[t]?.[first] ?? 0),
-						b: path.b + (blockB[t]?.[first] ?? 0),
-						// Neighbouring columns that split the same way line their seams
-						// up, which reads as rows again.
-						choiceCost:
-							path.choiceCost +
-							(blockCost[t]?.[first] ?? 0) +
-							(t !== 0 && path.template === t ? SAME_NEIGHBOUR_PENALTY : 0),
-					});
-				}
-			}
-		}
-		for (let len = 1; len < byLength.length; len++) {
-			const end = start + len;
-			let bestPath: Path | null = null;
-			let bestCost = Infinity;
-			for (const path of byLength[len] ?? []) {
-				const cost = fitRow(path, end === n).cost + path.choiceCost + variety(path);
-				if (cost < bestCost) {
-					bestCost = cost;
-					bestPath = path;
-				}
-			}
-			if (bestPath) candidates.push({ end, cost: bestCost, band: { kind: 'row', path: bestPath } });
-		}
-
-		// Feature bands.
-		if (!options.singlesOnly) {
-			for (const k of FEATURE_ROWS) {
-				const lens = new Array<number>(k).fill(1);
-				const visit = (row: number, used: number): void => {
-					if (row === k) {
-						const end = start + 1 + used;
-						if (end > n) return;
-						const cost = fitFeature(start, lens);
-						if (cost < INFEASIBLE) {
-							candidates.push({ end, cost: cost + FEATURE_PENALTY, band: { kind: 'feature', lens: [...lens] } });
-						}
-						return;
-					}
-					for (let len = 1; len <= MAX_SUBROW_ITEMS; len++) {
-						if (start + 1 + used + len > n) break;
-						lens[row] = len;
-						visit(row + 1, used + len);
-					}
-				};
-				visit(0, 0);
-			}
-		}
-
-		for (let c = 0; c < states; c++) {
-			const base = best[start * states + c] ?? Infinity;
-			if (base === Infinity) continue;
-			for (const { end, cost, band } of candidates) {
-				let next: number;
-				let total = base + cost;
-				if (band.kind === 'feature') {
-					if (c < MIN_FEATURE_GAP && size(start) !== 2) continue;
-					next = 0;
-				} else {
-					next = Math.min(c + 1, states - 1);
-					if (c + 1 > MAX_FEATURE_GAP) total += LATE_FEATURE_PENALTY;
-				}
-				const slot = end * states + next;
-				if (total < (best[slot] ?? Infinity)) {
-					best[slot] = total;
-					backFrom[slot] = start;
-					backState[slot] = c;
-					backBand[slot] = band;
-				}
-			}
-		}
-	}
-
-	let state = 0;
-	for (let c = 1; c < states; c++) {
-		if ((best[n * states + c] ?? Infinity) < (best[n * states + state] ?? Infinity)) state = c;
-	}
-	const bands: { start: number; end: number; band: Band }[] = [];
-	for (let end = n; end > 0; ) {
-		const slot = end * states + state;
-		const band = backBand[slot];
-		const start = backFrom[slot] ?? -1;
-		if (!band || start < 0) break;
-		bands.push({ start, end, band });
-		state = backState[slot] ?? 0;
-		end = start;
-	}
-	bands.reverse();
-
-	const boxes: Box[] = new Array<Box>(n);
-	let y = 0;
-	let features = 0;
-	for (const { start, end, band } of bands) {
-		if (band.kind === 'feature') {
-			// Alternate the big tile between the left and right edges.
-			const rows: Tree[] = [];
-			let offset = 1;
-			for (const len of band.lens) {
-				rows.push({ dir: 'h', children: Array.from({ length: len }, (_, j) => offset + j) });
-				offset += len;
-			}
-			const column: Tree = { dir: 'v', children: rows };
-			const tree: Tree = { dir: 'h', children: features % 2 === 0 ? [0, column] : [column, 0] };
-			const lin = linear(tree, start, ratio, gap);
-			const height = (width + lin.b) / lin.a;
-			place(tree, start, { x: 0, y, width, height }, ratio, gap, boxes);
-			features++;
-			y += height + gap;
-			continue;
-		}
-		const { path } = band;
-		const { height, stretch, ragged } = fitRow(path, end === n);
-		let x = 0;
-		let i = start;
-		const blocks = blocksOf(path);
-		blocks.forEach((t, index) => {
-			const template = TEMPLATES[t];
-			if (!template) return;
-			const lin = linear(template.tree, i, ratio, gap);
-			let blockWidth = (lin.a * height - lin.b) * stretch;
-			if (index === blocks.length - 1 && !ragged) blockWidth = Math.max(0, width - x);
-			place(template.tree, i, { x, y, width: blockWidth, height }, ratio, gap, boxes);
-			x += blockWidth + gap;
-			i += template.count;
-		});
-		y += height + gap;
-	}
-
-	return { boxes, height: bands.length > 0 ? y - gap : 0 };
-}
-
-/** Width = a * height - b for a subtree whose first tile is `first`. */
 function linear(tree: Tree, first: number, ratio: (i: number) => number, gap: number): Linear {
 	if (typeof tree === 'number') return { a: ratio(first + tree), b: 0 };
-	const parts = tree.children.map((child) => linear(child, first, ratio, gap));
-	const between = gap * (parts.length - 1);
-	if (tree.dir === 'h') {
-		let a = 0;
-		let b = -between;
-		for (const p of parts) {
-			a += p.a;
-			b += p.b;
-		}
-		return { a, b };
-	}
-	// Vertical: children share a width w, and a child's height is (w + b) / a.
-	let inv = 0;
-	let offset = between;
-	for (const p of parts) {
-		inv += 1 / p.a;
-		offset += p.b / p.a;
-	}
-	const a = 1 / inv;
-	return { a, b: a * offset };
+	const [l, r] = tree.children;
+	const p = linear(l, first, ratio, gap);
+	const q = linear(r, first, ratio, gap);
+	if (tree.dir === 'h') return { a: p.a + q.a, b: p.b + q.b - gap };
+	// Stacked: a shared width w gives child heights (w + b) / a.
+	const a = 1 / (1 / p.a + 1 / q.a);
+	return { a, b: a * (gap + p.b / p.a + q.b / q.a) };
 }
 
-/** Positions a subtree's tiles inside `box`, splitting so each keeps its shape. */
+/** Writes each leaf's box into `out`, splitting so every tile keeps its shape. */
 function place(
 	tree: Tree,
 	first: number,
@@ -475,73 +130,293 @@ function place(
 		out[first + tree] = box;
 		return;
 	}
-	const parts = tree.children.map((child) => linear(child, first, ratio, gap));
-	const between = gap * (parts.length - 1);
+	const [l, r] = tree.children;
+	const p = linear(l, first, ratio, gap);
+	const q = linear(r, first, ratio, gap);
 	if (tree.dir === 'h') {
-		const natural = parts.map((p) => Math.max(0, p.a * box.height - p.b));
-		const sum = natural.reduce((s, w) => s + w, 0) || 1;
-		const scale = (box.width - between) / sum;
-		let x = box.x;
-		tree.children.forEach((child, k) => {
-			const w = (natural[k] ?? 0) * scale;
-			place(child, first, { x, y: box.y, width: w, height: box.height }, ratio, gap, out);
-			x += w + gap;
-		});
+		const wl = p.a * box.height - p.b;
+		const wr = q.a * box.height - q.b;
+		const scale = (box.width - gap) / (wl + wr || 1);
+		const w = wl * scale;
+		place(l, first, { x: box.x, y: box.y, width: w, height: box.height }, ratio, gap, out);
+		place(r, first, { x: box.x + w + gap, y: box.y, width: box.width - w - gap, height: box.height }, ratio, gap, out);
 		return;
 	}
-	const natural = parts.map((p) => (box.width + p.b) / p.a);
-	const sum = natural.reduce((s, h) => s + h, 0) || 1;
-	const scale = (box.height - between) / sum;
-	let y = box.y;
-	tree.children.forEach((child, k) => {
-		const h = (natural[k] ?? 0) * scale;
-		place(child, first, { x: box.x, y, width: box.width, height: h }, ratio, gap, out);
-		y += h + gap;
-	});
+	const hl = (box.width + p.b) / p.a;
+	const hr = (box.width + q.b) / q.a;
+	const scale = (box.height - gap) / (hl + hr || 1);
+	const h = hl * scale;
+	place(l, first, { x: box.x, y: box.y, width: box.width, height: h }, ratio, gap, out);
+	place(r, first, { x: box.x, y: box.y + h + gap, width: box.width, height: box.height - h - gap }, ratio, gap, out);
 }
 
-/** Keeps the cheapest BEAM partial rows per length. */
-function keep(byLength: Path[][], len: number, path: Path): void {
-	const list = (byLength[len] ??= []);
-	if (list.length < BEAM) {
-		list.push(path);
+/** A partial band: columns so far, as a linked list (last first). */
+interface Path {
+	column: number;
+	parent: Path | null;
+	columns: number;
+	singles: number;
+	a: number;
+	b: number;
+	/** Estimated cost at TYPICAL_BAND height, for ranking only. */
+	estimate: number;
+}
+
+function columnsOf(path: Path): number[] {
+	const out: number[] = [];
+	for (let p: Path | null = path; p && p.columns > 0; p = p.parent) out.push(p.column);
+	return out.reverse();
+}
+
+/** Beam of partial bands for one length, with its worst entry tracked. */
+interface Beam {
+	paths: Path[];
+	worst: number;
+	worstEstimate: number;
+}
+
+/** Whether a path with this estimate would get into the beam. */
+function admits(beam: Beam | undefined, estimate: number): boolean {
+	return !beam || beam.paths.length < BEAM || estimate < beam.worstEstimate;
+}
+
+function keep(beams: Beam[], len: number, path: Path): void {
+	let beam = beams[len];
+	if (!beam) beams[len] = beam = { paths: [], worst: 0, worstEstimate: -Infinity };
+	if (beam.paths.length < BEAM) {
+		beam.paths.push(path);
+	} else if (path.estimate < beam.worstEstimate) {
+		beam.paths[beam.worst] = path;
+	} else {
 		return;
 	}
-	let worst = 0;
-	for (let k = 1; k < list.length; k++) {
-		if ((list[k]?.choiceCost ?? 0) > (list[worst]?.choiceCost ?? 0)) worst = k;
+	if (beam.paths.length < BEAM) {
+		if (path.estimate > beam.worstEstimate) {
+			beam.worstEstimate = path.estimate;
+			beam.worst = beam.paths.length - 1;
+		}
+		return;
 	}
-	if (path.choiceCost < (list[worst]?.choiceCost ?? Infinity)) list[worst] = path;
-}
-
-/** Large tiles want to stand alone; small ones are happy deeper in a block. */
-function sizeCost(size: number, depth: number): number {
-	if (depth === 0) {
-		if (size === 2) return -0.25;
-		if (size === 0) return 0.6;
-		return 0;
+	beam.worst = 0;
+	beam.worstEstimate = beam.paths[0]?.estimate ?? 0;
+	for (let k = 1; k < beam.paths.length; k++) {
+		const e = beam.paths[k]?.estimate ?? 0;
+		if (e > beam.worstEstimate) {
+			beam.worstEstimate = e;
+			beam.worst = k;
+		}
 	}
-	return size === 2 ? 0.5 * depth : 0;
 }
 
-/** A band of only full-height tiles is a plain row: the thing a mosaic avoids. */
-function variety(path: Path): number {
-	return path.blocks > 1 && path.singles === path.blocks ? 0.3 : 0;
-}
+export function mosaic(items: readonly MosaicItem[], options: MosaicOptions): MosaicLayout {
+	const n = items.length;
+	const width = Math.max(1, options.width);
+	const gap = Math.max(0, options.gap);
+	const tile = Math.max(16, options.tileSize);
+	const minTile = Math.max(0, options.minTileSize ?? 0);
+	const minBand = tile * MIN_BAND;
+	const maxBand = tile * MAX_BAND;
 
-function leafDepths(tree: Tree, count: number): number[] {
-	const out = new Array<number>(count).fill(0);
-	const walk = (node: Tree, depth: number): void => {
-		if (typeof node === 'number') out[node] = depth;
-		else for (const child of node.children) walk(child, depth + 1);
+	const ratio = (i: number): number => safeRatio(items[i]?.ratio);
+	const target = new Float64Array(n);
+	for (let i = 0; i < n; i++) {
+		const size = clamp(Math.round(items[i]?.size ?? 1), 0, 2);
+		target[i] = tile * tile * (AREA_BY_SIZE[size] ?? 1);
+	}
+	const scratch: Box[] = new Array<Box>(n);
+
+	/**
+	 * Every leaf's width and height is an affine function of the band height
+	 * (slicing trees only add, scale and divide by constants), so each is
+	 * stored as two coefficient pairs, found by placing the column at two
+	 * heights. Costing a column at any height is then allocation-free.
+	 */
+	const colA: Float64Array[] = [];
+	const colB: Float64Array[] = [];
+	const colLeaves: Float64Array[] = [];
+	const colEstimate: Float64Array[] = [];
+	const h1 = tile * 2;
+	const h2 = tile * 3;
+
+	const columnCost = (c: number, first: number, height: number): number => {
+		const shape = COLUMNS[c];
+		const leaves = colLeaves[c];
+		if (!shape || !leaves) return INFEASIBLE;
+		const base = first * MAX_COLUMN_TILES * 4;
+		let cost = 0;
+		for (let k = 0; k < shape.count; k++) {
+			const o = base + k * 4;
+			const w = (leaves[o] ?? 0) * height + (leaves[o + 1] ?? 0);
+			const h = (leaves[o + 2] ?? 0) * height + (leaves[o + 3] ?? 0);
+			if (w <= 0 || h <= 0) return INFEASIBLE;
+			if (h < minTile || w * h < minTile * minTile) return INFEASIBLE;
+			const d = Math.log((w * h) / (target[first + k] ?? 1));
+			cost += d * d;
+		}
+		return cost;
 	};
-	walk(tree, 0);
-	return out;
-}
 
-function deviation(height: number, target: number): number {
-	const d = (height - target) / target;
-	return d * d;
+	COLUMNS.forEach((shape, c) => {
+		const a = new Float64Array(n);
+		const b = new Float64Array(n);
+		const leaves = new Float64Array(n * MAX_COLUMN_TILES * 4);
+		const e = new Float64Array(n).fill(INFEASIBLE);
+		colA.push(a);
+		colB.push(b);
+		colLeaves.push(leaves);
+		colEstimate.push(e);
+		for (let i = 0; i + shape.count <= n; i++) {
+			const lin = linear(shape.tree, i, ratio, gap);
+			a[i] = lin.a;
+			b[i] = lin.b;
+			place(shape.tree, i, { x: 0, y: 0, width: lin.a * h1 - lin.b, height: h1 }, ratio, gap, scratch);
+			const first = scratch.slice(i, i + shape.count);
+			place(shape.tree, i, { x: 0, y: 0, width: lin.a * h2 - lin.b, height: h2 }, ratio, gap, scratch);
+			for (let k = 0; k < shape.count; k++) {
+				const p1 = first[k];
+				const p2 = scratch[i + k];
+				if (!p1 || !p2) continue;
+				const o = i * MAX_COLUMN_TILES * 4 + k * 4;
+				const sw = (p2.width - p1.width) / (h2 - h1);
+				const sh = (p2.height - p1.height) / (h2 - h1);
+				leaves[o] = sw;
+				leaves[o + 1] = p1.width - sw * h1;
+				leaves[o + 2] = sh;
+				leaves[o + 3] = p1.height - sh * h1;
+			}
+			e[i] = columnCost(c, i, tile * TYPICAL_BAND);
+		}
+	});
+
+	/** Exact cost of a full band, and its height. */
+	const bandFit = (path: Path, start: number, last: boolean): { cost: number; height: number; ragged: boolean } => {
+		const k = path.columns;
+		const natural = (width - gap * (k - 1) + path.b) / path.a;
+		let height = natural;
+		let ragged = false;
+		if (natural > maxBand || natural < minBand) {
+			// A panorama alone in its band may be shorter than usual.
+			if (natural < minBand && k === 1 && path.singles === 1 && natural >= minTile) {
+				return { cost: BAND_PENALTY + 1, height: natural, ragged: false };
+			}
+			if (!(last && natural > maxBand)) return { cost: INFEASIBLE, height, ragged };
+			// A short last band is a plain row, left-aligned, never a lone stack.
+			if (path.singles !== k) return { cost: INFEASIBLE, height, ragged };
+			// A short last band stays at a typical height without filling the width.
+			height = tile * TYPICAL_BAND;
+			ragged = true;
+		}
+		let cost = BAND_PENALTY;
+		let i = start;
+		let previous = -1;
+		for (const c of columnsOf(path)) {
+			const cc = columnCost(c, i, height);
+			if (cc >= INFEASIBLE) return { cost: INFEASIBLE, height, ragged };
+			cost += cc;
+			if (c === previous && (COLUMNS[c]?.count ?? 1) > 1) cost += SAME_NEIGHBOUR_PENALTY;
+			previous = c;
+			i += COLUMNS[c]?.count ?? 1;
+		}
+		if (k > 1 && path.singles === k) cost += PLAIN_ROW_PENALTY;
+		return { cost, height, ragged };
+	};
+
+	const best = new Float64Array(n + 1).fill(Infinity);
+	const from = new Int32Array(n + 1).fill(-1);
+	const chosen: (Path | null)[] = new Array<Path | null>(n + 1).fill(null);
+	best[0] = 0;
+
+	for (let start = 0; start < n; start++) {
+		const base = best[start] ?? Infinity;
+		if (base === Infinity) continue;
+		const root: Path = { column: -1, parent: null, columns: 0, singles: 0, a: 0, b: 0, estimate: 0 };
+		const byLength: Beam[] = [{ paths: [root], worst: 0, worstEstimate: 0 }];
+		for (let len = 0; len < MAX_BAND_TILES && start + len < n; len++) {
+			for (const path of byLength[len]?.paths ?? []) {
+				const k = path.columns;
+				// Already wider than the gallery at the lowest band height.
+				if (k > 0 && path.a * minBand - path.b + gap * (k - 1) > width) continue;
+				const first = start + len;
+				for (let c = 0; c < COLUMNS.length; c++) {
+					const shape = COLUMNS[c];
+					if (!shape) continue;
+					if (len + shape.count > MAX_BAND_TILES || first + shape.count > n) continue;
+					const columnEstimate = colEstimate[c]?.[first] ?? INFEASIBLE;
+					if (columnEstimate >= INFEASIBLE) continue;
+					const estimate = path.estimate + columnEstimate;
+					if (!admits(byLength[len + shape.count], estimate)) continue;
+					keep(byLength, len + shape.count, {
+						column: c,
+						parent: path,
+						columns: k + 1,
+						singles: path.singles + (shape.count === 1 ? 1 : 0),
+						a: path.a + (colA[c]?.[first] ?? 0),
+						b: path.b + (colB[c]?.[first] ?? 0),
+						estimate,
+					});
+				}
+			}
+		}
+		for (let len = 1; len < byLength.length; len++) {
+			const end = start + len;
+			for (const path of byLength[len]?.paths ?? []) {
+				const { cost } = bandFit(path, start, end === n);
+				if (cost >= INFEASIBLE) continue;
+				if (base + cost < (best[end] ?? Infinity)) {
+					best[end] = base + cost;
+					from[end] = start;
+					chosen[end] = path;
+				}
+			}
+		}
+		// Nothing fits from here: fall back to a lone tile so the layout completes.
+		if ((best[start + 1] ?? Infinity) === Infinity) {
+			best[start + 1] = base + INFEASIBLE;
+			from[start + 1] = start;
+			chosen[start + 1] = {
+				column: 0,
+				parent: root,
+				columns: 1,
+				singles: 1,
+				a: colA[0]?.[start] ?? 1,
+				b: 0,
+				estimate: 0,
+			};
+		}
+	}
+
+	const bands: { start: number; path: Path; end: number }[] = [];
+	for (let end = n; end > 0; ) {
+		const start = from[end] ?? -1;
+		const path = chosen[end];
+		if (start < 0 || !path) break;
+		bands.push({ start, path, end });
+		end = start;
+	}
+	bands.reverse();
+
+	const boxes: Box[] = new Array<Box>(n);
+	let y = 0;
+	for (const { start, path, end } of bands) {
+		const fit = bandFit(path, start, end === n);
+		const natural = (width - gap * (path.columns - 1) + path.b) / path.a;
+		// The fallback (nothing else fit) keeps the full width so there are no holes.
+		const height = fit.cost >= INFEASIBLE ? natural : fit.height;
+		const columns = columnsOf(path);
+		let x = 0;
+		let i = start;
+		columns.forEach((c, index) => {
+			const shape = COLUMNS[c];
+			if (!shape) return;
+			let w = (colA[c]?.[i] ?? 1) * height - (colB[c]?.[i] ?? 0);
+			if (index === columns.length - 1 && !fit.ragged) w = Math.max(0, width - x);
+			place(shape.tree, i, { x, y, width: w, height }, ratio, gap, boxes);
+			x += w + gap;
+			i += shape.count;
+		});
+		y += height + gap;
+	}
+	return { boxes, height: bands.length > 0 ? y - gap : 0 };
 }
 
 function safeRatio(ratio: number | undefined): number {

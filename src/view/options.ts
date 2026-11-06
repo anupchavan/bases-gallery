@@ -65,6 +65,8 @@ export function galleryViewOptions(config: BasesViewConfig): BasesAllOptions[] {
 			type: 'slider',
 			key: 'maxCrop',
 			displayName: 'Maximum crop per side (%)',
+			// The mosaic keeps every photo's exact shape; only rows crop.
+			shouldHide: () => config.get('layout') !== 'rows',
 			min: 0,
 			max: 25,
 			step: 1,
